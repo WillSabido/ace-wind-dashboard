@@ -1,0 +1,312 @@
+/* ACE Wind Turbine Dashboard – scoped to .acewd so it won't leak into the theme. */
+.acewd {
+  --g: #1f8a4c;
+  --g-dark: #14633a;
+  --o: #e07b00;
+  --ink: #16302b;
+  --mut: #5b6b66;
+  --line: #dbe5e0;
+  --bg: #fff;
+  --soft: #f3f8f5;
+  box-sizing: border-box;
+  max-width: 1100px;
+  margin: 1.5em auto;
+  padding: 1.25rem;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(20, 60, 40, 0.06);
+  font-size: 16px;
+  line-height: 1.4;
+}
+.acewd *,
+.acewd *::before,
+.acewd *::after {
+  box-sizing: border-box;
+}
+.acewd-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.acewd-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--g-dark);
+  line-height: 1.2;
+}
+.acewd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: var(--soft);
+  color: var(--mut);
+  border: 1px solid var(--line);
+}
+.acewd-chip::before {
+  content: "";
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: #9aa9a3;
+}
+.acewd-chip.on {
+  background: #e6f5ec;
+  color: var(--g-dark);
+  border-color: #b9e0c9;
+}
+.acewd-chip.on::before {
+  background: var(--g);
+  animation: acewd-pulse 1.6s infinite;
+}
+.acewd-chip.warn {
+  background: #fff3e0;
+  color: #8a5200;
+  border-color: #f3d19c;
+}
+.acewd-chip.warn::before {
+  background: var(--o);
+}
+@keyframes acewd-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(31, 138, 76, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 0.55rem rgba(31, 138, 76, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .acewd-chip.on::before {
+    animation: none;
+  }
+}
+
+.acewd-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.acewd-tile {
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+  min-height: 5.2rem;
+}
+.acewd-tile h3 {
+  margin: 0 0 0.15rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mut);
+}
+.acewd-val {
+  font-size: 1.7rem;
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.acewd-val small {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--mut);
+  margin-left: 0.2rem;
+}
+.acewd-sub {
+  font-size: 0.8rem;
+  color: var(--mut);
+  margin-top: 0.1rem;
+  min-height: 1.1em;
+}
+.acewd-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  margin-top: 0.35rem;
+  overflow: hidden;
+}
+.acewd-bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--g);
+  transition: width 0.5s;
+}
+.acewd-arrow {
+  display: inline-block;
+  width: 1.1em;
+  height: 1.1em;
+  margin-right: 0.3rem;
+  vertical-align: -0.12em;
+  transition: transform 0.5s;
+}
+.acewd-arrow svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: var(--g-dark);
+}
+
+.acewd-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.acewd-ctl label {
+  display: block;
+  margin: 0 0 0.2rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--mut);
+}
+.acewd-ctl select,
+.acewd-ctl input {
+  width: 100%;
+  max-width: 100%;
+  min-height: 2.5rem;
+  padding: 0.4rem 0.6rem;
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid #b9c7c1;
+  border-radius: 8px;
+}
+.acewd-ctl select:focus,
+.acewd-ctl input:focus,
+.acewd-btn:focus-visible {
+  outline: 2px solid var(--g);
+  outline-offset: 1px;
+}
+.acewd-custom {
+  grid-column: 1/-1;
+  display: none;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  align-items: end;
+}
+.acewd-custom.show {
+  display: grid;
+}
+
+.acewd-chartwrap {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.5rem 0.25rem 0.25rem;
+  overflow: hidden;
+  background: #fff;
+}
+.acewd-chart {
+  width: 100%;
+}
+.acewd-msg {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--mut);
+  font-weight: 600;
+  z-index: 5;
+}
+.acewd-msg.show {
+  display: flex;
+}
+.acewd .u-legend {
+  font-size: 0.85rem;
+  text-align: left;
+}
+.acewd .u-legend .u-series {
+  padding: 2px 8px;
+}
+
+.acewd-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.6rem;
+}
+.acewd-note {
+  font-size: 0.85rem;
+  color: var(--mut);
+}
+.acewd-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.acewd-btn {
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.4rem 0.9rem;
+  border-radius: 8px;
+  border: 1px solid var(--g);
+  background: #fff;
+  color: var(--g-dark);
+  cursor: pointer;
+}
+.acewd-btn:hover {
+  background: var(--soft);
+}
+.acewd-btn.primary {
+  background: var(--g);
+  color: #fff;
+}
+.acewd-btn.primary:hover {
+  background: var(--g-dark);
+}
+.acewd-foot {
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.78rem;
+  color: var(--mut);
+}
+.acewd-foot a {
+  color: var(--g-dark);
+}
+.acewd-loading,
+.acewd-error {
+  margin: 0;
+  padding: 1rem;
+  text-align: center;
+  color: var(--mut);
+}
+.acewd-error {
+  color: #8a2a1c;
+}
+.acewd-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+@media (max-width: 520px) {
+  .acewd {
+    padding: 0.8rem;
+    border-radius: 10px;
+  }
+  .acewd-val {
+    font-size: 1.45rem;
+  }
+}
