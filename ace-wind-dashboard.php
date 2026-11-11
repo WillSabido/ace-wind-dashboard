@@ -4,7 +4,7 @@
  * Plugin Name:       ACE Wind Turbine Dashboard
  * Plugin URI:        https://ambitioncommunityenergy.org/
  * Description:       Live data dashboard for the Ambition Community Energy wind turbine, powered by the ACE public data API. Add it to any page with the [ace_wind_dashboard] shortcode.
- * Version:           0.11.0
+ * Version:           0.12.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Ambition Community Energy
@@ -20,7 +20,7 @@ defined('ABSPATH') || exit;
 final class ACE_Wind_Dashboard
 {
 
-	const VERSION = '0.11.0';
+	const VERSION = '0.12.0';
 	const OPT     = 'ace_wind_options';
 	const NS      = 'ace-wind/v1';
 
@@ -423,11 +423,164 @@ final class ACE_Wind_Dashboard
 		return $t ? gmdate('Y-m-d\TH:i:s\Z', $t) : null;
 	}
 
-	/** The API's integer timestamps may be seconds or milliseconds; normalise to seconds. */
+	/** Seconds from 1601-01-01 (Windows FILETIME epoch) to 1970-01-01. */
+	const FILETIME_EPOCH = 11644473600;
+
+	/**
+	 * Candidate encodings of an integer timestamp: label => [ divisor to get seconds, epoch shift in seconds ].
+	 * The API schema only says "integer", so we identify the unit by which reading lands in 2000-2100.
+	 */
+	private static function ts_encodings()
+	{
+		return array(
+			'seconds'      => array(1, 0),
+			'milliseconds' => array(1e3, 0),
+			'microseconds' => array(1e6, 0),
+			'nanoseconds'  => array(1e9, 0),
+			'filetime'     => array(1e7, self::FILETIME_EPOCH), // 100 ns ticks since 1601 (OPC / Windows).
+		);
+	}
+
+	/**
+	 * Work out the unit of a raw timestamp.
+	 *
+	 * @return array|null [ label, unix_seconds ], or null if no unit puts it between 2000 and 2100.
+	 */
+	public static function detect_ts($raw)
+	{
+		$raw = (float) $raw;
+		foreach (self::ts_encodings() as $label => $enc) {
+			$unix = $raw / $enc[0] - $enc[1];
+			if ($unix >= 946684800 && $unix <= 4102444800) {
+				return array($label, $unix);
+			}
+		}
+		return null;
+	}
+
+	/** Normalise an API integer timestamp to Unix seconds. */
 	private static function norm_ts($t)
 	{
+		$d = self::detect_ts($t);
+		if ($d) {
+			return $d[1];
+		}
+		// Not plausible as 2000-2100 in any known unit: keep the older seconds/milliseconds guess.
 		$t = (float) $t;
 		return $t > 1e11 ? $t / 1000 : $t;
+	}
+
+	/* ---- Diagnostics ------------------------------------------------- */
+
+	/**
+	 * Fetch the newest few readings straight from the API (no cache) and explain what the timestamps mean.
+	 *
+	 * @return array { ok, error?, url, raw[], unit, unix, utc, local, server_now, delta, verdict, message, candidates[], api_clock_skew? }
+	 */
+	public function diagnose()
+	{
+		$o   = $this->opts();
+		$url = untrailingslashit($o['api_base']) . '/v1/sites/' . rawurlencode($o['site_id'])
+			. '/data/site_instantaneous/latest?resolution=1s&fields=aggregate_active_power&limit=3';
+
+		$res = wp_safe_remote_get(
+			$url,
+			array(
+				'timeout'    => 12,
+				'headers'    => array('Accept' => 'application/json'),
+				'user-agent' => 'ACE-Wind-Dashboard-WP/' . self::VERSION . '; ' . home_url('/'),
+			)
+		);
+		$out = array('ok' => false, 'url' => $url);
+		if (is_wp_error($res)) {
+			$out['error'] = 'Could not reach the API: ' . $res->get_error_message();
+			return $out;
+		}
+		$code = (int) wp_remote_retrieve_response_code($res);
+		$body = json_decode(wp_remote_retrieve_body($res), true);
+		if (200 !== $code || ! is_array($body)) {
+			$out['error'] = 'The API answered HTTP ' . $code . '.';
+			return $out;
+		}
+		$raw = array_values((array) ($body['timestamps'] ?? array()));
+		if (! $raw) {
+			$out['error'] = 'The API returned no records for site_instantaneous.';
+			return $out;
+		}
+
+		$server_now = time();
+		$newest     = end($raw);
+		$det        = self::detect_ts($newest);
+		$unix       = $det ? $det[1] : self::norm_ts($newest);
+
+		// array_merge, not "+=": the union operator would keep the initial 'ok' => false.
+		$out = array_merge($out, array(
+			'ok'         => true,
+			'raw'        => $raw,
+			'unit'       => $det ? $det[0] : null,
+			'unix'       => $unix,
+			'utc'        => self::fmt_utc($unix),
+			'server_now' => $server_now,
+			'delta'      => (int) round($unix - $server_now),
+		));
+		try {
+			$tz           = new DateTimeZone($o['timezone']);
+			$out['local'] = (new DateTime('@' . (int) $unix))->setTimezone($tz)->format('Y-m-d H:i:s T');
+		} catch (Exception $e) {
+			$out['local'] = '';
+		}
+
+		// How would each possible encoding read this number, and which one matches "now"?
+		$cands = array();
+		foreach (array_merge(self::ts_encodings(), array('labview (1904 epoch, s)' => array(1, 2082844800))) as $label => $enc) {
+			$u       = (float) $newest / $enc[0] - $enc[1];
+			$cands[] = array(
+				'label'  => $label,
+				'utc'    => self::fmt_utc($u),
+				'delta'  => abs($u) < 253402300799 ? (int) round($u - $server_now) : null,
+			);
+		}
+		$out['candidates'] = $cands;
+
+		// Compare WordPress's clock with the API's own clock (HTTP Date header).
+		$date = wp_remote_retrieve_header($res, 'date');
+		if ($date && strtotime($date)) {
+			$out['api_clock_skew'] = strtotime($date) - $server_now;
+		}
+
+		list($out['verdict'], $out['message']) = self::verdict($det, $out['delta']);
+		return $out;
+	}
+
+	private static function fmt_utc($unix)
+	{
+		return abs($unix) < 253402300799 ? gmdate('Y-m-d H:i:s', (int) $unix) . ' UTC' : 'out of range';
+	}
+
+	/** Classify the gap between the newest reading and the server clock. */
+	private static function verdict($det, $delta)
+	{
+		if (! $det) {
+			return array('unrecognised', 'The timestamp is not a plausible date (2000-2100) in seconds, milliseconds, microseconds, nanoseconds or Windows FILETIME. See the table of interpretations and report which row matches the current time.');
+		}
+		if (abs($delta) <= 120) {
+			return array('ok', 'The newest reading is within two minutes of this server\'s clock, so the timestamps are being read correctly (unit: ' . $det[0] . ').');
+		}
+		$nearest = round($delta / 900) * 900;   // time-zone offsets are multiples of 15 minutes
+		if (abs($delta) >= 900 && abs($delta - $nearest) <= 90) {
+			$h = $delta / 3600;
+			return array('offset', sprintf(
+				'The newest reading is %s hours %s now, a clean multiple of 15 minutes. That pattern suggests the API clock (the SCADA "OPC observation time") is in local time or another time zone rather than UTC.',
+				rtrim(rtrim(number_format(abs($h), 2), '0'), '.'),
+				$delta < 0 ? 'behind' : 'ahead of'
+			));
+		}
+		return array('stale', sprintf(
+			'The newest reading is %d seconds %s now. The timestamps are readable (unit: %s), so the data itself is old or the clocks differ; check that the turbine feed is live.',
+			abs($delta),
+			$delta < 0 ? 'behind' : 'ahead of',
+			$det[0]
+		));
 	}
 
 	public function rest_data(WP_REST_Request $r)
@@ -686,6 +839,17 @@ final class ACE_Wind_Dashboard
 			</form>
 
 			<hr>
+			<h2>Diagnostics</h2>
+			<p>Reads the newest record straight from the API and shows how its timestamp is interpreted. Use this if times on the dashboard look wrong.</p>
+			<?php
+			$diag_url = wp_nonce_url(admin_url('options-general.php?page=ace-wind-dashboard&ace_diag=1'), 'ace_wind_diag');
+			if (isset($_GET['ace_diag']) && check_admin_referer('ace_wind_diag')) { // phpcs:ignore
+				$this->render_diagnostics($this->diagnose());
+			}
+			?>
+			<p><a class="button" href="<?php echo esc_url($diag_url); ?>">Check timestamps now</a></p>
+
+			<hr>
 			<h2>Shortcode options</h2>
 			<p><code>[ace_wind_dashboard title="Our turbine" family="site_instantaneous" field="aggregate_active_power" compare="aggregate_wind_speed" range="1800" height="420" tiles="yes" controls="yes"]</code></p>
 			<ul style="list-style:disc;margin-left:2em">
@@ -707,6 +871,42 @@ final class ACE_Wind_Dashboard
 			</p>
 		</div>
 <?php
+	}
+
+	/** Print the result of diagnose() as an admin notice plus a table of interpretations. */
+	private function render_diagnostics($d)
+	{
+		if (empty($d['ok'])) {
+			echo '<div class="notice notice-error inline"><p>' . esc_html($d['error']) . '</p></div>';
+			return;
+		}
+		$class = 'ok' === $d['verdict'] ? 'notice-success' : 'notice-warning';
+		echo '<div class="notice ' . esc_attr($class) . ' inline"><p><strong>' . esc_html(strtoupper($d['verdict'])) . '</strong> – ' . esc_html($d['message']) . '</p></div>';
+
+		echo '<table class="widefat striped" style="max-width:760px"><tbody>';
+		$rows = array(
+			'Raw timestamps from the API (oldest → newest)' => implode(', ', array_map('strval', $d['raw'])),
+			'Detected unit'                                  => $d['unit'] ? $d['unit'] : 'none plausible',
+			'Newest reading (UTC)'                           => $d['utc'],
+			'Newest reading (' . $this->opts()['timezone'] . ')' => $d['local'],
+			'This server\'s clock (UTC)'                     => gmdate('Y-m-d H:i:s', $d['server_now']) . ' UTC',
+			'Newest reading minus server clock'              => $d['delta'] . ' s',
+		);
+		if (isset($d['api_clock_skew'])) {
+			$rows['API server clock minus this server'] = $d['api_clock_skew'] . ' s';
+		}
+		foreach ($rows as $k => $v) {
+			echo '<tr><th style="width:42%">' . esc_html($k) . '</th><td>' . esc_html((string) $v) . '</td></tr>';
+		}
+		echo '</tbody></table>';
+
+		echo '<p><strong>How the newest raw value reads under each encoding</strong> (the right one is within seconds of now):</p>';
+		echo '<table class="widefat striped" style="max-width:760px"><thead><tr><th>Encoding</th><th>Date</th><th>Difference from now</th></tr></thead><tbody>';
+		foreach ($d['candidates'] as $c) {
+			echo '<tr><td>' . esc_html($c['label']) . '</td><td>' . esc_html($c['utc']) . '</td><td>'
+				. esc_html(null === $c['delta'] ? '–' : $c['delta'] . ' s') . '</td></tr>';
+		}
+		echo '</tbody></table>';
 	}
 }
 
