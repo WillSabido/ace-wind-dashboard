@@ -245,8 +245,9 @@ function containerHtml(cfg) {
  * Mount one or more dashboards and load a fresh copy of the script.
  * @param {object|object[]} cfgOver config overrides (array = several containers on one page)
  * @param {function} handler fetch handler (see installFetch)
+ * @param {{built?: boolean}} opts built:true runs assets/js/dashboard.js instead of the TypeScript sources
  */
-function mount(cfgOver, handler) {
+function mount(cfgOver, handler, opts) {
   document.body.innerHTML = "";
   const list = Array.isArray(cfgOver) ? cfgOver : [cfgOver || {}];
   const els = list.map((o) => {
@@ -259,9 +260,20 @@ function mount(cfgOver, handler) {
   window.uPlot = FakeUPlot;
   jest.spyOn(document, "addEventListener"); // so cleanupListeners() can remove what the script adds
   let api;
-  jest.isolateModules(() => {
-    api = require("../../assets/js/dashboard.js");
-  });
+  if (opts && opts.built) {
+    // Run the shipped bundle (assets/js/dashboard.js) exactly as a browser would: one classic <script>.
+    (0, eval)(
+      require("fs").readFileSync(
+        require("path").join(__dirname, "../../assets/js/dashboard.js"),
+        "utf8",
+      ),
+    );
+  } else {
+    jest.isolateModules(() => {
+      require("../../src/main"); // entry point: builds every .acewd container
+      api = require("../../src/dashboard"); // same module instance, so tests can reach Dash
+    });
+  }
   return { el: els[0], els, fetch: fetchMock, uPlot: FakeUPlot, api };
 }
 
@@ -270,7 +282,7 @@ function cleanupListeners() {
   const spy = document.addEventListener;
   if (!spy || !spy.mock) return;
   spy.mock.calls.forEach((c) => {
-    if (c[0] === "visibilitychange")
+    if (c[0] === "visibilitychange" || c[0] === "DOMContentLoaded")
       document.removeEventListener(c[0], c[1], c[2]);
   });
 }

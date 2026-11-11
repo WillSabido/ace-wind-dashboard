@@ -1,7 +1,7 @@
 /** Pure helpers exported by the script for testing. */
 const { NOW_S, res } = require("./helpers");
 document.body.innerHTML = ""; // nothing to initialise
-const { pickRes, nf, clock, lastVal } = require("../../assets/js/dashboard.js");
+const { pickRes, nf, clock, lastVal } = require("../../src/util");
 
 const SITE = [res("1s", 1), res("60s", 60)];
 const STATS = [res("60s", 60), res("10m", 600), res("daily", 86400)];
