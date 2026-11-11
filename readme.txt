@@ -4,7 +4,7 @@ Tags: wind, energy, dashboard, chart, renewable
 Requires at least: 5.8
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.9.0
+Stable tag: 0.10.0
 License: GPLv2 or later
 
 Live data dashboard for the Ambition Community Energy wind turbine, powered by the ACE public data API.
@@ -25,3 +25,5 @@ uPlot 1.6.31 (MIT) by Leon Sorokin is bundled in assets/vendor.
 == Changelog ==
 = 0.9.0 =
 Initial alpha version for testing.
+= 0.10.0 =
+Added tests for PHP & JS.

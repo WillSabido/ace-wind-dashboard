@@ -1,0 +1,27 @@
+{
+	"name": "ace-wind-dashboard",
+	"version": "0.10.0",
+	"private": true,
+	"description": "Front-end tests for the ACE Wind Turbine Dashboard WordPress plugin",
+	"scripts": {
+		"test": "jest",
+		"test:coverage": "jest --coverage"
+	},
+	"jest": {
+		"testEnvironment": "jsdom",
+		"testMatch": [
+			"<rootDir>/tests/js/**/*.test.js"
+		],
+		"collectCoverageFrom": [
+			"assets/js/dashboard.js"
+		],
+		"restoreMocks": true,
+		"setupFilesAfterEnv": [
+			"<rootDir>/tests/js/setup.js"
+		]
+	},
+	"devDependencies": {
+		"jest": "^29.7.0",
+		"jest-environment-jsdom": "^29.7.0"
+	}
+}

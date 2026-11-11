@@ -3,7 +3,7 @@
  * Plugin Name:       ACE Wind Turbine Dashboard
  * Plugin URI:        https://ambitioncommunityenergy.org/
  * Description:       Live data dashboard for the Ambition Community Energy wind turbine, powered by the ACE public data API. Add it to any page with the [ace_wind_dashboard] shortcode.
- * Version:           0.9.0
+ * Version:           0.10.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Ambition Community Energy
@@ -18,7 +18,7 @@ defined( 'ABSPATH' ) || exit;
 
 final class ACE_Wind_Dashboard {
 
-	const VERSION = '0.9.0';
+	const VERSION = '0.10.0';
 	const OPT     = 'ace_wind_options';
 	const NS      = 'ace-wind/v1';
 

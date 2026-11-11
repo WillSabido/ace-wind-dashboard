@@ -1,0 +1,12 @@
+tests
+node_modules
+package.json
+package-lock.json
+phpunit.xml.dist
+composer.json
+composer.lock
+vendor
+.phpunit.result.cache
+.distignore
+.gitignore
+coverage

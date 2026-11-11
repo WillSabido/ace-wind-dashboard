@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.6/phpunit.xsd"
+         bootstrap="tests/bootstrap.php"
+         colors="true"
+         cacheResult="false"
+         beStrictAboutTestsThatDoNotTestAnything="true"
+         failOnWarning="true">
+	<testsuites>
+		<testsuite name="ace-wind-dashboard">
+			<directory suffix="Test.php">tests/Unit</directory>
+		</testsuite>
+	</testsuites>
+	<coverage processUncoveredFiles="true">
+		<include>
+			<file>ace-wind-dashboard.php</file>
+			<file>uninstall.php</file>
+		</include>
+	</coverage>
+</phpunit>
