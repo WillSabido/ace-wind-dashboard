@@ -10,3 +10,11 @@ vendor
 .distignore
 .gitignore
 coverage
+scripts
+src
+tsconfig.json
+tsconfig.test.json
+*.patch
+.DS_Store
+DEVELOPMENT.md
+live-reading-preview.html

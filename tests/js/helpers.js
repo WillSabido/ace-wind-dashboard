@@ -342,4 +342,5 @@ module.exports = {
   optionTexts,
   optionValues,
   makeFakeUPlot,
+  installFetch,
 };

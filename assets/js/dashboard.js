@@ -1,4 +1,4 @@
-/*! ACE Wind Turbine Dashboard - generated from src/ (TypeScript). Do not edit: run "npm run build". */
+/*! ACE Wind Turbine Dashboard - dashboard - generated from src/ (TypeScript). Do not edit: run "npm run build". */
 "use strict";
 (() => {
   // src/api.ts
@@ -116,8 +116,8 @@
   var MPS_TO_MPH = 2.23694;
 
   // src/util.ts
-  function h(tag, attrs = {}, kids = []) {
-    const e = document.createElement(tag);
+  function hIn(doc, tag, attrs = {}, kids = []) {
+    const e = doc.createElement(tag);
     Object.keys(attrs).forEach((k) => {
       const v = String(attrs[k]);
       if (k === "text") e.textContent = v;
@@ -128,6 +128,9 @@
       if (c) e.appendChild(c);
     });
     return e;
+  }
+  function h(tag, attrs = {}, kids = []) {
+    return hIn(document, tag, attrs, kids);
   }
   var uidCounter = 0;
   function uid(prefix) {

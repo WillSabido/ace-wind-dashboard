@@ -4,6 +4,7 @@ beforeEach(() => {
   jest.useFakeTimers();
   jest.setSystemTime(NOW);
   jest.spyOn(console, "warn").mockImplementation(() => {}); // the script logs request failures
+  jest.spyOn(document, "addEventListener"); // so cleanupListeners() can remove what scripts add
 });
 
 afterEach(() => {

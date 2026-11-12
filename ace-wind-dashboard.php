@@ -3,9 +3,9 @@
 /**
  * Plugin Name:       ACE Wind Turbine Dashboard
  * Plugin URI:        https://ambitioncommunityenergy.org/
- * Description:       Live data dashboard for the Ambition Community Energy wind turbine, powered by the ACE public data API. Add it to any page with the [ace_wind_dashboard] shortcode.
- * Version:           1.0.0
- * Requires at least: 5.8
+ * Description:       Live data dashboard for the Ambition Community Energy wind turbine, powered by the ACE public data API. Add it with the [ace_wind_dashboard] shortcode, or add specified live readings with the "ACE Live Reading" block.
+ * Version:           1.1.0
+ * Requires at least: 6.3
  * Requires PHP:      7.4
  * Author:            Ambition Community Energy
  * License:           GPL-2.0-or-later
@@ -17,16 +17,18 @@
 
 defined('ABSPATH') || exit;
 
+require_once __DIR__ . '/includes/class-ace-wind-live-reading.php';
+
 final class ACE_Wind_Dashboard
 {
 
-	const VERSION = '1.0.0';
+	const VERSION = '1.1.0';
 	const OPT     = 'ace_wind_options';
 	const NS      = 'ace-wind/v1';
 
 	/** Hard limits that keep requests to the upstream API small and polite. */
-	const MAX_POINTS = 12000; // Maximum points per chart request.
-	const MAX_PAGES  = 12;    // Maximum sequential upstream pages per request.
+	const MAX_POINTS = 1000; // Maximum points per chart request.
+	const MAX_PAGES  = 12;   // Maximum sequential upstream pages per request.
 
 	private static $instance = null;
 
@@ -41,6 +43,7 @@ final class ACE_Wind_Dashboard
 	private function __construct()
 	{
 		add_shortcode('ace_wind_dashboard', array($this, 'shortcode'));
+		new ACE_Wind_Live_Reading($this);
 		add_action('wp_enqueue_scripts', array($this, 'register_assets'));
 		add_action('rest_api_init', array($this, 'register_routes'));
 
@@ -89,7 +92,7 @@ final class ACE_Wind_Dashboard
 				'family'   => 'site_instantaneous',
 				'field'    => 'aggregate_active_power',
 				'compare'  => 'aggregate_wind_speed',
-				'range'    => 1800,
+				'range'    => 999,
 				'height'   => 420,
 				'tiles'    => 'yes',
 				'controls' => 'yes',
@@ -649,7 +652,6 @@ final class ACE_Wind_Dashboard
 		$span  = (int) $r['span'];
 		$ts    = array();
 		$ser   = array_fill_keys($fields, array());
-		// $ttl   = 30;
 		$trunc = false;
 
 		if ($limit > 0 || ($span > 0 && (int) ceil($span / $rs) + 1 <= $res['max_latest'])) {
@@ -661,7 +663,6 @@ final class ACE_Wind_Dashboard
 				return $this->error_response($b);
 			}
 			$this->merge_page($b, $fields, $ts, $ser);
-			// $ttl = $rs <= 1 ? 1 : 5;
 		} else {
 			// ---- Historical range, paginated sequentially (as the API asks).
 			if ($span > 0) {
@@ -865,10 +866,10 @@ final class ACE_Wind_Dashboard
 
 			<hr>
 			<h2>Shortcode options</h2>
-			<p><code>[ace_wind_dashboard title="Our turbine" family="site_instantaneous" field="aggregate_active_power" compare="aggregate_wind_speed" range="1800" height="420" tiles="yes" controls="yes"]</code></p>
+			<p><code>[ace_wind_dashboard title="Our turbine" family="site_instantaneous" field="aggregate_active_power" compare="aggregate_wind_speed" range="999" height="420" tiles="yes" controls="yes"]</code></p>
 			<ul style="list-style:disc;margin-left:2em">
 				<li><code>family</code>, <code>field</code>, <code>compare</code> – initial data set and measurements (names as in the API's <code>/v1/families</code>). Use <code>compare=""</code> for a single line.</li>
-				<li><code>range</code> – initial period in seconds (e.g. <code>3600</code> = 1 hour, <code>86400</code> = 24 hours).</li>
+				<li><code>range</code> – initial period in seconds (e.g. <code>3600</code> = 1 hour, <code>86400</code> = 24 hours). - Max range: 999 due to API limitations.</li>
 				<li><code>tiles="no"</code> hides the live summary tiles; <code>controls="no"</code> hides the pull-down menus.</li>
 			</ul>
 

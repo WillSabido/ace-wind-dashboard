@@ -25,6 +25,8 @@ class ACE_Test_Env
 	public static $deleted_options = array();
 	public static $cache_flushes   = 0;
 	public static $actions         = array();
+	public static $block_types     = array();
+	public static $inline_scripts  = array();
 
 	public static function reset()
 	{
@@ -33,6 +35,7 @@ class ACE_Test_Env
 		self::$http = null;
 		self::$cache_flushes = 0;
 		self::$actions = array();
+		self::$block_types = self::$inline_scripts = array();
 		$GLOBALS['wpdb']->queries = array();
 	}
 }
@@ -140,6 +143,28 @@ function add_shortcode($tag, $cb)
 function do_action($tag, ...$args)
 {
 	ACE_Test_Env::$actions[] = array_merge(array($tag), $args);
+}
+function register_block_type($path, $args = array())
+{
+	ACE_Test_Env::$block_types[] = array('path' => $path, 'args' => $args);
+	return true;
+}
+function generate_block_asset_handle($name, $field)
+{
+	return str_replace('/', '-', $name) . '-' . strtolower(preg_replace('/([A-Z])/', '-$1', $field));
+}
+function wp_add_inline_script($handle, $data, $position = 'after')
+{
+	ACE_Test_Env::$inline_scripts[] = array($handle, $data, $position);
+	return true;
+}
+function get_block_wrapper_attributes($extra = array())
+{
+	return 'class="wp-block-ace-wind-live-reading"';
+}
+function sanitize_hex_color($c)
+{
+	return preg_match('/^#([A-Fa-f0-9]{3}){1,2}$/', (string) $c) ? $c : null;
 }
 function register_rest_route($ns, $route, $args)
 {
@@ -285,8 +310,11 @@ function esc_url($s)
 function esc_url_raw($url, $protocols = null)
 {
 	$url = trim((string) $url);
-	$p   = parse_url($url);
-	$ok  = $protocols ?: array('http', 'https');
+	if ('' !== $url && '/' === $url[0] && (! isset($url[1]) || '/' !== $url[1])) {
+		return $url;   // site-relative
+	}
+	$p  = parse_url($url);
+	$ok = $protocols ? $protocols : array('http', 'https');
 	if (empty($p['scheme']) || empty($p['host']) || ! in_array(strtolower($p['scheme']), $ok, true)) {
 		return '';
 	}

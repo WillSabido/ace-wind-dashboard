@@ -6,13 +6,14 @@ import type { DataResponse, FieldInfo, Latest, Resolution } from "./types";
 export type Attrs = Record<string, string | number>;
 export type Kid = Node | null | undefined | false;
 
-/** Create an element. Special attrs: `text` (textContent) and `html` (innerHTML). */
-export function h<K extends keyof HTMLElementTagNameMap>(
+/** Create an element in a given document (the block editor's canvas is an iframe with its own document). */
+export function hIn<K extends keyof HTMLElementTagNameMap>(
+  doc: Document,
   tag: K,
   attrs: Attrs = {},
   kids: Kid[] = [],
 ): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
+  const e = doc.createElement(tag);
   Object.keys(attrs).forEach((k) => {
     const v = String(attrs[k]);
     if (k === "text") e.textContent = v;
@@ -23,6 +24,15 @@ export function h<K extends keyof HTMLElementTagNameMap>(
     if (c) e.appendChild(c);
   });
   return e;
+}
+
+/** Create an element. Special attrs: `text` (textContent) and `html` (innerHTML). */
+export function h<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  attrs: Attrs = {},
+  kids: Kid[] = [],
+): HTMLElementTagNameMap[K] {
+  return hIn(document, tag, attrs, kids);
 }
 
 let uidCounter = 0;
