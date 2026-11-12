@@ -6,7 +6,6 @@ use PHPUnit\Framework\TestCase;
  * Shared fixtures: a fake ACE API (families, assets, latest, range) behind the stubbed
  * wp_safe_remote_get(), plus helpers to call the plugin's REST handlers.
  */
-/** @noinspection PhpUndefinedClassInspection PHPUnit provides this base class at test runtime. */
 abstract class ACE_Wind_TestCase extends TestCase
 {
 

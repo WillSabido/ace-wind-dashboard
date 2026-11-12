@@ -90,11 +90,26 @@ class DataLatestTest extends ACE_Wind_TestCase
 		$this->assertSame(array(null, null), $d['series']['aggregate_wind_speed']);
 	}
 
-	public function test_cache_control_follows_resolution()
+	public function test_live_responses_are_marked_uncacheable_for_browsers_cdns_and_cache_plugins()
 	{
-		$this->assertSame('public, max-age=1', $this->data($this->live_params())->headers['Cache-Control']);
-		$r = $this->data($this->live_params(array('resolution' => '60s', 'span' => 3600)));
-		$this->assertSame('public, max-age=5', $r->headers['Cache-Control']);
+		foreach (array($this->live_params(), $this->live_params(array('resolution' => '60s', 'span' => 3600))) as $params) {
+			$resp = $this->data($params);
+			$this->assertStringContainsString('no-store', $resp->headers['Cache-Control']);
+			$this->assertStringContainsString('no-cache', $resp->headers['Cache-Control']);
+			$this->assertStringContainsString('max-age=0', $resp->headers['Cache-Control']);
+			$this->assertSame('no-cache', $resp->headers['Pragma']);
+			$this->assertSame('no-cache', $resp->headers['X-LiteSpeed-Cache-Control']);
+		}
+		$this->assertTrue(defined('DONOTCACHEPAGE') && DONOTCACHEPAGE);
+		$this->assertContains('litespeed_control_set_nocache', array_column(ACE_Test_Env::$actions, 0));
+	}
+
+	public function test_catalogue_may_still_be_cached_briefly_and_does_not_trigger_no_cache_hooks()
+	{
+		ACE_Test_Env::$actions = array();
+		$resp = $this->plugin->rest_catalogue();
+		$this->assertSame('public, max-age=300', $resp->headers['Cache-Control']);
+		$this->assertSame(array(), ACE_Test_Env::$actions);
 	}
 
 	public function test_identical_requests_are_served_from_cache()

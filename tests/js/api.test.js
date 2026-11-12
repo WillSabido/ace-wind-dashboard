@@ -50,12 +50,13 @@ describe("request(): URL building", () => {
     expect(f.mock.calls[1][0]).toBe(base + "catalogue");
   });
 
-  test("sends JSON Accept header and never credentials", async () => {
+  test("sends JSON Accept header, no credentials, and bypasses the browser HTTP cache", async () => {
     const f = mockFetch(() => Promise.resolve(jsonResponse({})));
     await load().request(REST, "catalogue");
     expect(f.mock.calls[0][1]).toEqual({
       headers: { Accept: "application/json" },
       credentials: "omit",
+      cache: "no-store",
     });
   });
 

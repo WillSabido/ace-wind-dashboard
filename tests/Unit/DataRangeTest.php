@@ -103,14 +103,24 @@ class DataRangeTest extends ACE_Wind_TestCase
 		$this->assertErrorResponse($bad, 400, 'ace_too_many');
 	}
 
-	public function test_range_responses_are_cached_for_thirty_seconds()
+	public function test_range_responses_are_uncacheable_downstream_but_cached_upstream_for_the_api()
 	{
 		// Fixed window (not "last N seconds") so the test can't straddle a time bucket.
 		$params = $this->live_params(array('span' => 0, 'start' => '2026-03-01T10:00:00Z', 'end' => '2026-03-01T11:00:00Z'));
 		$resp   = $this->data($params);
-		$this->assertSame('public, max-age=30', $resp->headers['Cache-Control']);
+		$this->assertStringContainsString('no-store', $resp->headers['Cache-Control']);
 		$n = count($this->calls_matching('/range'));
 		$this->data($params);
+		$this->assertCount($n, $this->calls_matching('/range'), 'our transient cache still protects the API');
+	}
+
+	public function test_a_cache_busting_query_argument_does_not_reach_the_api_or_defeat_the_transient_cache()
+	{
+		$params = $this->live_params(array('span' => 0, 'start' => '2026-03-01T10:00:00Z', 'end' => '2026-03-01T11:00:00Z'));
+		$this->data($params + array('_b' => 111));
+		$n = count($this->calls_matching('/range'));
+		$this->data($params + array('_b' => 222));
 		$this->assertCount($n, $this->calls_matching('/range'));
+		$this->assertStringNotContainsString('_b=', end(ACE_Test_Env::$http_calls));
 	}
 }

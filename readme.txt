@@ -4,7 +4,7 @@ Tags: wind, energy, dashboard, chart, renewable
 Requires at least: 5.8
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 0.12.0
+Stable tag: 1.0.0
 License: GPLv2 or later
 
 Live data dashboard for the Ambition Community Energy wind turbine, powered by the ACE public data API.
@@ -22,7 +22,17 @@ ACE Wind Turbine Data, CC BY 4.0. Plumley, Garrad, Burke, Jonsson & Smirthwaite.
 == Third party ==
 uPlot 1.6.31 (MIT) by Leon Sorokin is bundled in assets/vendor.
 
+== Frequently Asked Questions ==
+
+= The chart is blank or the times are old until I change a menu =
+A cache (a WordPress cache plugin, your host, or a CDN) is probably storing the plugin's `/wp-json/ace-wind/v1/` responses. The plugin asks caches not to store them and makes every live request URL unique, but some caches ignore both. Exclude `/wp-json/ace-wind/` from caching (LiteSpeed Cache: Cache > Excludes > Do Not Cache URIs; WP Rocket: Advanced Rules > Never Cache URL(s); Cloudflare: a Cache Rule to bypass cache for that path). If the chart shows an error, the reason is printed under it and in the browser console.
+
+= Times on the dashboard are wrong =
+Open Settings > ACE Wind Dashboard > Diagnostics and click "Check timestamps now".
+
 == Changelog ==
+= 1.0.0 =
+Live responses are now sent as uncacheable (Cache-Control, LiteSpeed and DONOTCACHEPAGE signals) and every live request URL is unique, so cached copies can't leave the default chart blank or stale. Request failures now show their cause. If the default view has no data it automatically widens to the next longer period.
 = 0.12.0 =
 Timestamp unit is now detected automatically (seconds, milliseconds, microseconds, nanoseconds or Windows FILETIME) instead of guessing seconds vs milliseconds. New Settings > ACE Wind Dashboard > Diagnostics panel shows how the API's timestamps are being read.
 = 0.11.0 =

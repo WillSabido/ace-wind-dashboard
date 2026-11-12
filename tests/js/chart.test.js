@@ -427,7 +427,9 @@ describe("errors and recovery", () => {
   test("shows a retry message, then recovers with exponential back-off", async () => {
     const m = await ready({}, flaky(1));
     const msg = m.el.querySelector(".acewd-msg");
-    expect(msg.textContent).toBe("Couldn’t load data – retrying…");
+    expect(msg.textContent).toBe(
+      "Couldn’t load data – retrying… (HTTP 502: nope)",
+    );
     expect(msg.classList.contains("show")).toBe(true);
     expect(m.uPlot.instances).toHaveLength(0);
 
@@ -454,7 +456,7 @@ describe("errors and recovery", () => {
   test('rate limiting shows a "busy" message and respects Retry-After', async () => {
     const m = await ready({}, flaky(1, 429, { "Retry-After": "30" }));
     expect(m.el.querySelector(".acewd-msg").textContent).toBe(
-      "The data service is busy – retrying…",
+      "The data service is busy – retrying… (HTTP 429: nope)",
     );
     await tick(29999);
     expect(m.fetch.chart()).toHaveLength(1);
@@ -468,7 +470,7 @@ describe("errors and recovery", () => {
       if (isChart(c) && ++n === 1) throw new Error("offline");
     });
     expect(m.el.querySelector(".acewd-msg").textContent).toBe(
-      "Couldn’t load data – retrying…",
+      "Couldn’t load data – retrying… (offline)",
     );
     await tick(4000);
     expect(m.uPlot.instances).toHaveLength(1);

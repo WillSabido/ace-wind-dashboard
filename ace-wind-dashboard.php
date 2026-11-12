@@ -4,7 +4,7 @@
  * Plugin Name:       ACE Wind Turbine Dashboard
  * Plugin URI:        https://ambitioncommunityenergy.org/
  * Description:       Live data dashboard for the Ambition Community Energy wind turbine, powered by the ACE public data API. Add it to any page with the [ace_wind_dashboard] shortcode.
- * Version:           0.12.0
+ * Version:           1.0.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Ambition Community Energy
@@ -20,7 +20,7 @@ defined('ABSPATH') || exit;
 final class ACE_Wind_Dashboard
 {
 
-	const VERSION = '0.12.0';
+	const VERSION = '1.0.0';
 	const OPT     = 'ace_wind_options';
 	const NS      = 'ace-wind/v1';
 
@@ -164,6 +164,22 @@ final class ACE_Wind_Dashboard
 		return new WP_Error($code, $message, array('status' => $status, 'retry' => $retry));
 	}
 
+	/**
+	 * Mark a response as uncacheable by browsers, CDNs and WordPress cache plugins.
+	 * Live readings must never be served from a cache; our own transients already protect the upstream API.
+	 */
+	private function no_cache($resp)
+	{
+		$resp->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+		$resp->header('Pragma', 'no-cache');
+		$resp->header('X-LiteSpeed-Cache-Control', 'no-cache');
+		if (! defined('DONOTCACHEPAGE')) {
+			define('DONOTCACHEPAGE', true); // W3 Total Cache, WP Super Cache, WP Rocket and others honour this.
+		}
+		do_action('litespeed_control_set_nocache', 'ace-wind-dashboard live data');
+		return $resp;
+	}
+
 	/** Convert a WP_Error into a REST response, passing Retry-After through. */
 	private function error_response(WP_Error $e)
 	{
@@ -173,8 +189,7 @@ final class ACE_Wind_Dashboard
 		if (! empty($d['retry'])) {
 			$resp->header('Retry-After', (string) (int) $d['retry']);
 		}
-		$resp->header('Cache-Control', 'no-store');
-		return $resp;
+		return $this->no_cache($resp);
 	}
 
 	/**
@@ -634,7 +649,7 @@ final class ACE_Wind_Dashboard
 		$span  = (int) $r['span'];
 		$ts    = array();
 		$ser   = array_fill_keys($fields, array());
-		$ttl   = 30;
+		// $ttl   = 30;
 		$trunc = false;
 
 		if ($limit > 0 || ($span > 0 && (int) ceil($span / $rs) + 1 <= $res['max_latest'])) {
@@ -646,7 +661,7 @@ final class ACE_Wind_Dashboard
 				return $this->error_response($b);
 			}
 			$this->merge_page($b, $fields, $ts, $ser);
-			$ttl = $rs <= 1 ? 1 : 5;
+			// $ttl = $rs <= 1 ? 1 : 5;
 		} else {
 			// ---- Historical range, paginated sequentially (as the API asks).
 			if ($span > 0) {
@@ -707,8 +722,7 @@ final class ACE_Wind_Dashboard
 				'truncated'  => $trunc,
 			)
 		);
-		$resp->header('Cache-Control', 'public, max-age=' . (int) $ttl);
-		return $resp;
+		return $this->no_cache($resp);
 	}
 
 	private function merge_page($b, $fields, &$ts, &$ser)

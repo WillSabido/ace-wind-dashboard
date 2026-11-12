@@ -105,6 +105,41 @@ describe("initialisation", () => {
   });
 });
 
+describe("page load timing", () => {
+  test("waits for DOMContentLoaded when the script runs while the document is still loading", async () => {
+    const state = jest
+      .spyOn(document, "readyState", "get")
+      .mockReturnValue("loading");
+    const { el, fetch } = mount();
+    await settle();
+    expect(el.querySelector(".acewd-title")).toBeNull(); // nothing built yet
+    expect(fetch.calls).toHaveLength(0); // and no requests made
+
+    state.mockReturnValue("interactive");
+    document.dispatchEvent(new Event("DOMContentLoaded"));
+    await settle();
+    expect(el.querySelector(".acewd-title")).not.toBeNull();
+    expect(fetch.chart()).toHaveLength(1);
+  });
+
+  test("builds immediately when the document is already loaded", async () => {
+    const { el, fetch } = mount();
+    expect(fetch.calls.length).toBeGreaterThan(0); // catalogue requested synchronously
+    await settle();
+    expect(el.querySelector(".acewd-title")).not.toBeNull();
+  });
+
+  test("ignores containers without a data-config attribute", async () => {
+    const { fetch } = mount();
+    const stray = document.createElement("div");
+    stray.className = "acewd";
+    document.body.appendChild(stray);
+    await settle();
+    expect(stray.innerHTML).toBe("");
+    expect(fetch.calls.filter((c) => c.path === "catalogue")).toHaveLength(1);
+  });
+});
+
 describe("when the data service is unavailable", () => {
   test("shows a friendly error with the server message when the catalogue returns an error", async () => {
     const { el, fetch } = mount({}, (c) =>

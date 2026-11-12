@@ -32,6 +32,11 @@ export function uid(prefix: string): string {
   return "acewd-" + prefix + "-" + uidCounter;
 }
 
+/** Whole seconds since the Unix epoch. Used as a cache-busting bucket on live requests. */
+export function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
 /* ---------- formatting ---------- */
 
 /** Format a number for display; null/NaN/non-numeric become an en dash. */

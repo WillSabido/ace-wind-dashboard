@@ -39,7 +39,7 @@ class UpstreamTest extends ACE_Wind_TestCase
 		$resp = $this->data($this->live_params());
 		$this->assertErrorResponse($resp, 429, 'ace_rate_limited');
 		$this->assertSame('7', $resp->headers['Retry-After']);
-		$this->assertSame('no-store', $resp->headers['Cache-Control']);
+		$this->assertStringContainsString('no-store', $resp->headers['Cache-Control']);
 	}
 
 	public function test_retry_after_is_clamped_between_1_and_300()

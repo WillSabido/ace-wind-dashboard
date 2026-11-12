@@ -56,6 +56,7 @@ export function request<T>(
   return fetch(url, {
     headers: { Accept: "application/json" },
     credentials: "omit",
+    cache: "no-store",
   }).then((r) =>
     r
       .json()

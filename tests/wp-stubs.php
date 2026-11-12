@@ -24,6 +24,7 @@ class ACE_Test_Env
 	public static $enqueued    = array();
 	public static $deleted_options = array();
 	public static $cache_flushes   = 0;
+	public static $actions         = array();
 
 	public static function reset()
 	{
@@ -31,6 +32,7 @@ class ACE_Test_Env
 		self::$hooks = self::$shortcodes = self::$routes = self::$enqueued = self::$deleted_options = array();
 		self::$http = null;
 		self::$cache_flushes = 0;
+		self::$actions = array();
 		$GLOBALS['wpdb']->queries = array();
 	}
 }
@@ -134,6 +136,10 @@ function add_shortcode($tag, $cb)
 {
 	ACE_Test_Env::$shortcodes[$tag] = $cb;
 	ACE_Test_Env::$hooks[] = array('shortcode', $tag, $cb);
+}
+function do_action($tag, ...$args)
+{
+	ACE_Test_Env::$actions[] = array_merge(array($tag), $args);
 }
 function register_rest_route($ns, $route, $args)
 {

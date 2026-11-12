@@ -3,6 +3,7 @@ const { NOW, cleanupListeners } = require("./helpers");
 beforeEach(() => {
   jest.useFakeTimers();
   jest.setSystemTime(NOW);
+  jest.spyOn(console, "warn").mockImplementation(() => {}); // the script logs request failures
 });
 
 afterEach(() => {

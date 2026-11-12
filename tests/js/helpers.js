@@ -162,7 +162,10 @@ function parseCall(url) {
   u.searchParams.forEach((v, k) => {
     params[k] = v;
   });
-  return { path: url.slice(REST.length).split("?")[0], params, url };
+  // "_b" is the cache-busting time bucket; keep it out of `params` so tests can compare the real parameters.
+  const bucket = params._b === undefined ? undefined : Number(params._b);
+  delete params._b;
+  return { path: url.slice(REST.length).split("?")[0], params, bucket, url };
 }
 
 /**
@@ -289,8 +292,7 @@ function cleanupListeners() {
 
 /** Flush pending promise callbacks (fake-timer friendly). */
 async function settle() {
-  await jest.advanceTimersByTimeAsync(0);
-  await jest.advanceTimersByTimeAsync(0);
+  for (let i = 0; i < 12; i++) await jest.advanceTimersByTimeAsync(0);
 }
 /** Advance the clock, letting promise chains run in between. */
 async function tick(ms) {

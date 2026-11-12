@@ -27,7 +27,8 @@
     const url = rest + path + (qs ? (rest.indexOf("?") >= 0 ? "&" : "?") + qs : "");
     return fetch(url, {
       headers: { Accept: "application/json" },
-      credentials: "omit"
+      credentials: "omit",
+      cache: "no-store"
     }).then(
       (r) => r.json().catch(() => ({})).then((j) => {
         if (!r.ok) {
@@ -133,6 +134,9 @@
     uidCounter += 1;
     return "acewd-" + prefix + "-" + uidCounter;
   }
+  function nowSeconds() {
+    return Math.floor(Date.now() / 1e3);
+  }
   function nf(v, dp) {
     return v == null || isNaN(v) ? "–" : Number(v).toLocaleString("en-GB", {
       maximumFractionDigits: dp,
@@ -187,6 +191,7 @@
   }
 
   // src/dashboard.ts
+  var describe = (info) => info.status ? "HTTP " + info.status + (info.message ? ": " + info.message : "") : info.message;
   var isoSeconds = (unixSeconds) => new Date(unixSeconds * 1e3).toISOString().replace(/\.\d+Z$/, "Z");
   var localInputValue = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
   var Dash = class {
@@ -201,6 +206,8 @@
       this.pending = false;
       this.fail = 0;
       this.retryAfter = 0;
+      /** Until the user touches a control or a chart has been drawn, an empty default view widens itself. */
+      this.autoWiden = true;
       this.tileFail = 0;
       this.tileDelay = 0;
       this.el = el;
@@ -402,6 +409,14 @@
         custom
       };
       this.ctl = ctl;
+      [ctl.family, ctl.asset, ctl.f1, ctl.f2, ctl.range, ctl.style].forEach(
+        (c) => c.addEventListener("change", () => {
+          this.autoWiden = false;
+        })
+      );
+      go.addEventListener("click", () => {
+        this.autoWiden = false;
+      });
       STYLES.forEach(
         (s) => ctl.style.appendChild(h("option", { value: s[0], text: s[1] }))
       );
@@ -561,12 +576,14 @@
         family: "site_instantaneous",
         resolution: "1s",
         limit: 5,
+        _b: nowSeconds(),
         fields: "aggregate_active_power,aggregate_wind_speed,aggregate_wind_direction"
       }) : Promise.resolve(null);
       const wecReq = wec ? request(c.rest, "data", {
         family: "wec_instantaneous",
         resolution: "1s",
         limit: 5,
+        _b: nowSeconds(),
         asset: wec.assets[0],
         fields: "wec_rotor_speed"
       }).catch(() => null) : Promise.resolve(null);
@@ -577,6 +594,7 @@
         this.tileFail += 1;
         const info = errorInfo(e);
         if (info.retry) this.tileDelay = info.retry * 1e3;
+        console.warn("[ACE dashboard] live readings failed:", describe(info));
         this.setChip("warn", "Data unavailable");
       }).then(() => {
         const base = Math.max(1, c.liveRefresh) * 1e3;
@@ -673,6 +691,7 @@
         params.end = isoSeconds(st.cEnd || 0);
       } else {
         params.span = span;
+        params._b = nowSeconds();
       }
       this.busy = true;
       if (showSpin && !this.plot) this.say("Loading chart…");
@@ -686,8 +705,10 @@
         this.busy = false;
         this.fail += 1;
         const info = errorInfo(e);
+        const detail = describe(info);
+        console.warn("[ACE dashboard] chart request failed:", detail, params);
         this.say(
-          info.status === 429 ? "The data service is busy – retrying…" : "Couldn’t load data – retrying…"
+          (info.status === 429 ? "The data service is busy – retrying…" : "Couldn’t load data – retrying…") + (detail ? " (" + detail + ")" : "")
         );
         if (info.retry) this.retryAfter = info.retry * 1e3;
       }).then(() => {
@@ -698,6 +719,25 @@
           this.schedule(res);
         }
       });
+    }
+    /**
+     * The default view came back empty: step up to the next longer preset that this data set supports and
+     * reload straight away, so a first-time visitor sees a chart whenever any data exists.
+     */
+    widen() {
+      const st = this.st;
+      const cur = st.range;
+      if (cur === "custom") return false;
+      const f = this.fam();
+      const next = RANGES.find((r) => r[0] > cur && pickRes(f.resolutions, r[0]));
+      if (!next) {
+        this.autoWiden = false;
+        return false;
+      }
+      st.range = next[0];
+      if (this.ctl) this.ctl.range.value = String(next[0]);
+      this.pending = true;
+      return true;
     }
     schedule(res) {
       const st = this.st;
@@ -732,6 +772,7 @@
         cols = cols.map((c) => order.map((k) => c[k]));
       }
       if (!ts.length || cols.every((c) => c.every((v) => v == null))) {
+        if (this.autoWiden && this.widen()) return;
         this.say("No data available for this period.");
         if (this.plot) {
           this.plot.destroy();
@@ -742,6 +783,7 @@
         this.note.textContent = "";
         return;
       }
+      this.autoWiden = false;
       this.say("");
       this.last = { ts, cols, fields, meta: d.fields, family: d.family };
       const m1 = d.fields[fields[0]];
