@@ -4,10 +4,10 @@
  * Plugin Name:       ACE Wind Turbine Dashboard
  * Plugin URI:        https://ambitioncommunityenergy.org/
  * Description:       Live data dashboard for the Ambition Community Energy wind turbine, powered by the ACE public data API. Add it with the [ace_wind_dashboard] shortcode, or add specified live readings with the "ACE Live Reading" block.
- * Version:           1.1.0
+ * Version:           1.1.1
  * Requires at least: 6.3
  * Requires PHP:      7.4
- * Author:            Ambition Community Energy
+ * Author:            Will Sabido
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       ace-wind-dashboard
@@ -22,12 +22,12 @@ require_once __DIR__ . '/includes/class-ace-wind-live-reading.php';
 final class ACE_Wind_Dashboard
 {
 
-	const VERSION = '1.1.0';
+	const VERSION = '1.1.1';
 	const OPT     = 'ace_wind_options';
 	const NS      = 'ace-wind/v1';
 
 	/** Hard limits that keep requests to the upstream API small and polite. */
-	const MAX_POINTS = 1000; // Maximum points per chart request.
+	const MAX_POINTS = 14000; // Maximum points per chart request.
 	const MAX_PAGES  = 12;   // Maximum sequential upstream pages per request.
 
 	private static $instance = null;

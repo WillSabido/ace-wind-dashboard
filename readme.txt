@@ -40,6 +40,9 @@ A cache (a WordPress cache plugin, your host, or a CDN) is probably storing the 
 Open Settings > ACE Wind Dashboard > Diagnostics and click "Check timestamps now".
 
 == Changelog ==
+= 1.1.1 =
+Revert to previous MAX_POINTS value following testing. Add more specific author info.
+
 = 1.1.0 =
 New **ACE Live Reading** Gutenberg block: a live readout tile with a choice of measurement, units and an animated icon (turbine, wind, compass, bolt, gauge or your own image). Requires WordPress 6.3 or later.
 
