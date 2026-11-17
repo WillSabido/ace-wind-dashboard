@@ -4,7 +4,7 @@
  * Plugin Name:       ACE Wind Turbine Dashboard
  * Plugin URI:        https://ambitioncommunityenergy.org/
  * Description:       Live data dashboard for the Ambition Community Energy wind turbine, powered by the ACE public data API. Add it with the [ace_wind_dashboard] shortcode, or add specified live readings with the "ACE Live Reading" block.
- * Version:           1.1.1
+ * Version:           1.1.2
  * Requires at least: 6.3
  * Requires PHP:      7.4
  * Author:            Will Sabido
@@ -22,7 +22,7 @@ require_once __DIR__ . '/includes/class-ace-wind-live-reading.php';
 final class ACE_Wind_Dashboard
 {
 
-	const VERSION = '1.1.1';
+	const VERSION = '1.1.2';
 	const OPT     = 'ace_wind_options';
 	const NS      = 'ace-wind/v1';
 
@@ -30,9 +30,9 @@ final class ACE_Wind_Dashboard
 	const MAX_POINTS = 14000; // Maximum points per chart request.
 	const MAX_PAGES  = 12;   // Maximum sequential upstream pages per request.
 
-	private static $instance = null;
+	private static ?self $instance = null;
 
-	public static function instance()
+	public static function instance(): self
 	{
 		if (null === self::$instance) {
 			self::$instance = new self();
@@ -84,7 +84,7 @@ final class ACE_Wind_Dashboard
 		wp_register_script('ace-wind-dashboard', $u . 'js/dashboard.js', array('uplot'), self::VERSION, true);
 	}
 
-	public function shortcode($atts)
+	public function shortcode(array $atts = [])
 	{
 		$a = shortcode_atts(
 			array(
@@ -162,7 +162,7 @@ final class ACE_Wind_Dashboard
 		);
 	}
 
-	private function error($code, $message, $status, $retry = 0)
+	private function error(string $code, string $message, int $status, int $retry = 0)
 	{
 		return new WP_Error($code, $message, array('status' => $status, 'retry' => $retry));
 	}
@@ -171,7 +171,7 @@ final class ACE_Wind_Dashboard
 	 * Mark a response as uncacheable by browsers, CDNs and WordPress cache plugins.
 	 * Live readings must never be served from a cache; our own transients already protect the upstream API.
 	 */
-	private function no_cache($resp)
+	private function no_cache(WP_REST_Response $resp): WP_REST_Response
 	{
 		$resp->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
 		$resp->header('Pragma', 'no-cache');
@@ -200,7 +200,7 @@ final class ACE_Wind_Dashboard
 	 *
 	 * @return array|WP_Error Decoded JSON body.
 	 */
-	private function upstream($path, $query, $ttl)
+	private function upstream(string $path, array $query, int $ttl)
 	{
 		$o   = $this->opts();
 		$url = untrailingslashit($o['api_base']) . $path;
@@ -262,7 +262,7 @@ final class ACE_Wind_Dashboard
 
 	/* ---- Catalogue --------------------------------------------------- */
 
-	private static function res_seconds($r)
+	private static function res_seconds(string $r)
 	{
 		if (preg_match('/^(\d+)s$/', $r, $m)) {
 			return (int) $m[1];
@@ -435,7 +435,10 @@ final class ACE_Wind_Dashboard
 
 	/* ---- Data -------------------------------------------------------- */
 
-	private static function to_iso($v)
+	/**
+	 * @param int|float|string|null $v
+	 */
+	private static function to_iso($v): ?string
 	{
 		$t = is_numeric($v) ? (int) $v : strtotime((string) $v);
 		return $t ? gmdate('Y-m-d\TH:i:s\Z', $t) : null;
@@ -462,6 +465,7 @@ final class ACE_Wind_Dashboard
 	/**
 	 * Work out the unit of a raw timestamp.
 	 *
+	 * @param int|float|string $raw Raw timestamp value from the API.
 	 * @return array|null [ label, unix_seconds ], or null if no unit puts it between 2000 and 2100.
 	 */
 	public static function detect_ts($raw)
@@ -476,7 +480,12 @@ final class ACE_Wind_Dashboard
 		return null;
 	}
 
-	/** Normalise an API integer timestamp to Unix seconds. */
+	/**
+	 * Normalise an API integer timestamp to Unix seconds.
+	 *
+	 * @param int|float|string|null $t
+	 * @return float
+	 */
 	private static function norm_ts($t)
 	{
 		$d = self::detect_ts($t);
@@ -570,12 +579,20 @@ final class ACE_Wind_Dashboard
 		return $out;
 	}
 
+	/**
+	 * @param float|int $unix Unix timestamp.
+	 */
 	private static function fmt_utc($unix)
 	{
 		return abs($unix) < 253402300799 ? gmdate('Y-m-d H:i:s', (int) $unix) . ' UTC' : 'out of range';
 	}
 
-	/** Classify the gap between the newest reading and the server clock. */
+	/**
+	 * Classify the gap between the newest reading and the server clock.
+	 *
+	 * @param array|null $det Timestamp detection result: [unit label, Unix timestamp].
+	 * @param int         $delta Difference between the reading and server clock, in seconds.
+	 */
 	private static function verdict($det, $delta)
 	{
 		if (! $det) {
@@ -726,7 +743,7 @@ final class ACE_Wind_Dashboard
 		return $this->no_cache($resp);
 	}
 
-	private function merge_page($b, $fields, &$ts, &$ser)
+	private function merge_page(array $b, array $fields, array &$ts, array &$ser)
 	{
 		$bt = (array) ($b['timestamps'] ?? array());
 		$n  = count($bt);
@@ -746,7 +763,7 @@ final class ACE_Wind_Dashboard
 	 * Admin: settings page
 	 * ------------------------------------------------------------------- */
 
-	public function action_links($links)
+	public function action_links(array $links): array
 	{
 		array_unshift($links, '<a href="' . esc_url(admin_url('options-general.php?page=ace-wind-dashboard')) . '">' . esc_html__('Settings', 'ace-wind-dashboard') . '</a>');
 		return $links;
@@ -762,7 +779,7 @@ final class ACE_Wind_Dashboard
 		register_setting('ace_wind', self::OPT, array('sanitize_callback' => array($this, 'sanitize')));
 	}
 
-	public function sanitize($in)
+	public function sanitize(array $in): array
 	{
 		$d   = $this->opts();
 		$out = array();
@@ -889,7 +906,7 @@ final class ACE_Wind_Dashboard
 	}
 
 	/** Print the result of diagnose() as an admin notice plus a table of interpretations. */
-	private function render_diagnostics($d)
+	private function render_diagnostics(array $d)
 	{
 		if (empty($d['ok'])) {
 			echo '<div class="notice notice-error inline"><p>' . esc_html($d['error']) . '</p></div>';

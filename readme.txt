@@ -4,7 +4,7 @@ Tags: wind, energy, dashboard, chart, renewable, live data
 Requires at least: 6.3
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.0
+Stable tag: 1.1.2
 License: GPLv2 or later
 
 Live data dashboard for the Ambition Community Energy wind turbine, powered by the ACE public data API.
@@ -40,6 +40,9 @@ A cache (a WordPress cache plugin, your host, or a CDN) is probably storing the 
 Open Settings > ACE Wind Dashboard > Diagnostics and click "Check timestamps now".
 
 == Changelog ==
+= 1.1.2 =
+Add missing type info to dashboard class.
+
 = 1.1.1 =
 Revert to previous MAX_POINTS value following testing. Add more specific author info.
 

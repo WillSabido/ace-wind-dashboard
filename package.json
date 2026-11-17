@@ -1,6 +1,6 @@
 {
 	"name": "ace-wind-dashboard",
-	"version": "1.1.1",
+	"version": "1.1.2",
 	"private": true,
 	"description": "Front-end tests for the ACE Wind Turbine Dashboard WordPress plugin",
 	"scripts": {
