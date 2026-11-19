@@ -14,9 +14,87 @@ class DataRangeTest extends ACE_Wind_TestCase
 		$start = strtotime($q['start']);
 		$end   = strtotime($q['end']);
 		$this->assertSame(3600, $end - $start);
-		$this->assertSame(0, $end % 30, 'End is rounded to a 30 s bucket so cache keys repeat');
+		$this->assertSame(0, $end % 2, 'Live 1-second data: the end is rounded to a 2 s bucket so cache keys repeat');
 		$this->assertGreaterThanOrEqual($before, $end);
 		$this->assertSame('1000', $q['page_size'], 'page size comes from the API capability');
+	}
+
+	/** TTL (seconds) the plugin used for the newest cached /range response. */
+	private function range_ttl()
+	{
+		$ttl = null;
+		foreach (ACE_Test_Env::$http_calls as $i => $url) {
+			if (strpos($url, '/range') !== false) {
+				$ttl = ACE_Test_Env::$ttls['ace_wind_' . md5($url)] ?? $ttl;
+			}
+		}
+		return $ttl;
+	}
+
+	public static function windows()
+	{
+		// Clock at 1790000001 (odd, and not a multiple of 30 or 600).
+		return array(
+			'1-second data: end rounds UP to the next 2 s'     => array('1s', 1800, 1790000002),
+			'1-minute data: end rounds up to the next 60 s'    => array('60s', 7 * 86400, 1790000040),
+			'10-minute stats: end rounds up to the next 600 s' => array('10m', 30 * 86400, 1790000400),
+		);
+	}
+
+	/** @dataProvider windows */
+	public function test_the_window_end_is_rounded_up_to_a_resolution_appropriate_bucket($resolution, $span, $expected_end)
+	{
+		ACE_Test_Env::$now = 1790000001;
+		$fields = '10m' === $resolution ? 'wind_speed_mean' : 'aggregate_active_power';
+		$family = '10m' === $resolution ? 'wecstd' : 'site_instantaneous';
+		$this->data(array('family' => $family, 'resolution' => $resolution, 'fields' => $fields, 'span' => $span));
+		list(, $q) = $this->last_call();
+		$this->assertSame($expected_end, strtotime($q['end']));
+		$this->assertSame($span, strtotime($q['end']) - strtotime($q['start']));
+	}
+
+	public function test_requests_in_the_same_bucket_share_one_cached_upstream_answer_and_the_next_bucket_is_new()
+	{
+		$params = $this->live_params(array('span' => 1800));
+		ACE_Test_Env::$now = 1790000001;
+		$this->data($params);
+		$n = count($this->calls_matching('/range'));
+		ACE_Test_Env::$now = 1790000002;                   // same 2 s bucket (ends at ...002)
+		$this->data($params);
+		$this->assertCount($n, $this->calls_matching('/range'));
+		ACE_Test_Env::$now = 1790000003;                   // next bucket
+		$this->data($params);
+		$this->assertCount($n + 1, $this->calls_matching('/range'));
+	}
+
+	public function test_live_one_second_data_is_not_cached_for_longer_than_two_seconds()
+	{
+		$this->data($this->live_params(array('span' => 1800)));      // the default view: 1801 rows -> paged range
+		$this->assertSame(2, $this->range_ttl(), 'a "live" chart must still move every couple of seconds');
+	}
+
+	public function test_slower_data_keeps_the_longer_window_and_cache()
+	{
+		$this->data($this->live_params(array('resolution' => '60s', 'span' => 7 * 86400)));
+		list(, $q) = $this->last_call();
+		$this->assertSame(0, strtotime($q['end']) % 30);
+		$this->assertSame(30, $this->range_ttl());
+	}
+
+	public function test_fixed_custom_windows_use_the_longer_cache_even_for_one_second_data()
+	{
+		$this->data($this->live_params(array('span' => 0, 'start' => '2026-03-01T10:00:00Z', 'end' => '2026-03-01T10:20:00Z')));
+		$this->assertSame(30, $this->range_ttl());
+	}
+
+	public function test_the_default_view_is_fetched_in_two_pages_of_1000_rows()
+	{
+		$this->data($this->live_params(array('span' => 1800)));
+		$calls = $this->calls_matching('/range');
+		$this->assertCount(1, $calls, 'the fake API reports one page; the page size asked for is what matters');
+		list(, $q) = $this->last_call();
+		$this->assertSame('1000', $q['page_size']);
+		$this->assertSame(1800, strtotime($q['end']) - strtotime($q['start']));
 	}
 
 	public function test_bucket_is_at_least_the_resolution()

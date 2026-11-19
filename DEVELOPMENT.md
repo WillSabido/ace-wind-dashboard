@@ -7,10 +7,11 @@ committed so the plugin works straight from a zip with no build step.
 ## Layout
 
 | Path | Purpose |
-|---|---|
+| --- | --- |
 | `src/types.ts` | Interfaces: shortcode config, catalogue, API data, UI state (and the `window.uPlot` global) |
 | `src/constants.ts` | Time ranges, colours, compass points, resolution limits, thresholds |
 | `src/util.ts` | Pure helpers: `pickRes`, `nf`, `clock`, `lastVal`, `fieldLabel`, DOM builder `h` |
+| `src/errors.ts` | `explainError`: decides if a failure is retryable and writes the visitor-facing message, hint and reference |
 | `src/api.ts` | Typed `request()`, `ApiError`, `errorInfo()`, shared `catalogue()` fetch |
 | `src/dashboard.ts` | The `Dash` class (menus, tiles/status chip, chart, live refresh, CSV) |
 | `src/main.ts` | Entry point; bundled to `assets/js/dashboard.js` |

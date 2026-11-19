@@ -30,7 +30,7 @@ class ShortcodeTest extends ACE_Wind_TestCase
 		$this->assertSame('site_instantaneous', $c['family']);
 		$this->assertSame('aggregate_active_power', $c['field']);
 		$this->assertSame('aggregate_wind_speed', $c['compare']);
-		$this->assertSame(999, $c['range']);
+		$this->assertSame(1800, $c['range']);
 		$this->assertSame(420, $c['height']);
 		$this->assertTrue($c['tiles']);
 		$this->assertTrue($c['controls']);

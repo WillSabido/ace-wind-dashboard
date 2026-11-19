@@ -82,14 +82,14 @@ export function fieldLabel(f: FieldInfo): string {
 
 /**
  * Choose a data resolution for a time span in seconds, or null if none is suitable.
- * Prefers the finest resolution that fits the API's single-call "latest" limit; steps down
+ * Prefers the finest resolution whose row count fits that resolution's own single-call "latest" limit; steps down
  * to finer data when the coarse choice would give too few points.
  */
 export function pickRes(list: Resolution[], span: number): Resolution | null {
   let chosen: Resolution | null = null;
   let idx = -1;
   for (let i = 0; i < list.length; i++) {
-    if (span / list[i].seconds <= LIMITS.latest) {
+    if (span / list[i].seconds <= (list[i].max_latest || LIMITS.latest)) {
       chosen = list[i];
       idx = i;
       break;

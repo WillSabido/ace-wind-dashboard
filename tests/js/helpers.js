@@ -13,12 +13,13 @@ const NOW_S = Math.floor(NOW.getTime() / 1000);
 
 /* ---------- fixtures (same shape as the PHP /catalogue endpoint returns) ---------- */
 
-const res = (resolution, seconds, refresh) => ({
+// max_latest mirrors the plugin's effective limit: the lower of the API's advertised latest limit (2000) and its page size.
+const res = (resolution, seconds, refresh, maxLatest) => ({
   resolution,
   seconds,
   refresh: refresh || seconds,
   max_page: 1000,
-  max_latest: 2000,
+  max_latest: maxLatest || (seconds <= 1 ? 1000 : 2000),
 });
 const fld = (name, label, unit) => ({ name, label, unit: unit || "" });
 

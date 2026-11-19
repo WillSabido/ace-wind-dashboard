@@ -26,6 +26,9 @@ class ACE_Test_Env
 	public static $cache_flushes   = 0;
 	public static $actions         = array();
 	public static $block_types     = array();
+	public static $ttls            = array();
+	/** When set, apply_filters( 'ace_wind_now' ) returns this instead of the real time. */
+	public static $now             = null;
 	public static $inline_scripts  = array();
 
 	public static function reset()
@@ -35,7 +38,8 @@ class ACE_Test_Env
 		self::$http = null;
 		self::$cache_flushes = 0;
 		self::$actions = array();
-		self::$block_types = self::$inline_scripts = array();
+		self::$block_types = self::$inline_scripts = self::$ttls = array();
+		self::$now = null;
 		$GLOBALS['wpdb']->queries = array();
 	}
 }
@@ -140,6 +144,10 @@ function add_shortcode($tag, $cb)
 	ACE_Test_Env::$shortcodes[$tag] = $cb;
 	ACE_Test_Env::$hooks[] = array('shortcode', $tag, $cb);
 }
+function apply_filters($tag, $value, ...$args)
+{
+	return ('ace_wind_now' === $tag && null !== ACE_Test_Env::$now) ? ACE_Test_Env::$now : $value;
+}
 function do_action($tag, ...$args)
 {
 	ACE_Test_Env::$actions[] = array_merge(array($tag), $args);
@@ -230,6 +238,7 @@ function get_transient($k)
 function set_transient($k, $v, $t = 0)
 {
 	ACE_Test_Env::$transients[$k] = $v;
+	ACE_Test_Env::$ttls[$k] = $t;
 	return true;
 }
 function wp_cache_flush()

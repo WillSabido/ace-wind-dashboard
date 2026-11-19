@@ -4,7 +4,7 @@ Tags: wind, energy, dashboard, chart, renewable, live data
 Requires at least: 6.3
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.2
+Stable tag: 1.1.3
 License: GPLv2 or later
 
 Live data dashboard for the Ambition Community Energy wind turbine, powered by the ACE public data API.
@@ -36,10 +36,16 @@ uPlot 1.6.31 (MIT) by Leon Sorokin is bundled in assets/vendor.
 = The chart is blank or the times are old until I change a menu =
 A cache (a WordPress cache plugin, your host, or a CDN) is probably storing the plugin's `/wp-json/ace-wind/v1/` responses. The plugin asks caches not to store them and makes every live request URL unique, but some caches ignore both. Exclude `/wp-json/ace-wind/` from caching (LiteSpeed Cache: Cache > Excludes > Do Not Cache URIs; WP Rocket: Advanced Rules > Never Cache URL(s); Cloudflare: a Cache Rule to bypass cache for that path). If the chart shows an error, the reason is printed under it and in the browser console.
 
+= The chart area says "This chart can't be shown" =
+The data service refused the request, usually because the time period is too long for the chosen data. Pick a shorter period or a different measurement. The reference under the message (for example "HTTP 400 · ace_upstream") helps if you need to ask for support.
+
 = Times on the dashboard are wrong =
 Open Settings > ACE Wind Dashboard > Diagnostics and click "Check timestamps now".
 
 == Changelog ==
+= 1.1.3 =
+Fixed the chart failing with "HTTP 400 ace_upstream" for periods of 1000 seconds or more: the API allows at most its page size (1000 rows at 1-second resolution) per "latest" request even though it advertises 2000, so the plugin now uses the lower limit and falls back to the paged range endpoint if the API still refuses. When the data service rejects a request, the chart area now shows a clear explanation (what was said, what to try, and a reference code) instead of staying blank, and the identical request is no longer retried. Loading and "no data" notes are now visible before the first chart is drawn. The API's own error text is passed through.
+
 = 1.1.2 =
 Add missing type info to dashboard class.
 

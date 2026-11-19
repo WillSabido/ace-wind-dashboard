@@ -117,6 +117,59 @@ class UpstreamTest extends ACE_Wind_TestCase
 		$this->assertSame('start must be before end', $resp->data['error']);
 	}
 
+	public static function error_bodies()
+	{
+		return array(
+			'{error:{message}}'               => array(array('error' => array('message' => 'limit too large')), 'limit too large'),
+			'{error:"..."}'                   => array(array('error' => 'bad resolution'), 'bad resolution'),
+			'{detail:"..."}'                  => array(array('detail' => 'Not found'), 'Not found'),
+			'FastAPI {detail:[{msg}]}'        => array(array('detail' => array(array('loc' => array('query', 'limit'), 'msg' => 'ensure this value is <= 1000'))), 'ensure this value is <= 1000'),
+			'{message:"..."}'                 => array(array('message' => 'Too many rows'), 'Too many rows'),
+			'error object without a message'  => array(array('error' => array('code' => 7)), 'The data service rejected the request (HTTP 400).'),
+			'empty message'                   => array(array('error' => array('message' => '   ')), 'The data service rejected the request (HTTP 400).'),
+			'unrelated JSON'                  => array(array('foo' => 'bar'), 'The data service rejected the request (HTTP 400).'),
+			'complete tags are stripped'      => array(array('error' => array('message' => '<b>limit</b> <i>too</i> large')), 'limit too large'),
+			'a bare < is kept (it is text)'   => array(array('error' => array('message' => 'limit must be < 1000 and > 0')), 'limit must be < 1000 and > 0'),
+			'whitespace is collapsed'         => array(array('error' => array('message' => "too   many\n rows")), 'too many rows'),
+		);
+	}
+
+	/** @dataProvider error_bodies */
+	public function test_the_apis_own_reason_is_passed_through_for_client_errors($body, $expected)
+	{
+		$this->warm();
+		$this->respond(400, json_encode($body));
+		$resp = $this->data($this->live_params(array('span' => 0, 'limit' => 5)));
+		$this->assertErrorResponse($resp, 400, 'ace_upstream');
+		$this->assertStringContainsString($expected, $resp->data['error']);
+	}
+
+	public function test_script_tags_never_survive_into_the_message()
+	{
+		$this->warm();
+		$this->respond(400, json_encode(array('error' => array('message' => 'bad <script>alert(1)</script> input'))));
+		$resp = $this->data($this->live_params(array('span' => 0, 'limit' => 5)));
+		$this->assertStringNotContainsString('<script', $resp->data['error']);
+		$this->assertStringNotContainsString('</script', $resp->data['error']);
+	}
+
+	public function test_a_very_long_reason_is_truncated()
+	{
+		$this->warm();
+		$this->respond(400, json_encode(array('error' => array('message' => str_repeat('x', 500)))));
+		$resp = $this->data($this->live_params(array('span' => 0, 'limit' => 5)));
+		$this->assertSame(200, mb_strlen($resp->data['error']));
+	}
+
+	public function test_a_non_json_client_error_gets_a_generic_sentence_with_the_status()
+	{
+		$this->warm();
+		$this->respond(404, '<html>Not Found</html>');
+		$resp = $this->data($this->live_params(array('span' => 0, 'limit' => 5)));
+		$this->assertErrorResponse($resp, 400, 'ace_upstream');
+		$this->assertSame('The data service rejected the request (HTTP 404).', $resp->data['error']);
+	}
+
 	public function test_upstream_5xx_is_a_502()
 	{
 		$this->warm();

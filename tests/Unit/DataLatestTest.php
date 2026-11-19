@@ -6,13 +6,47 @@ class DataLatestTest extends ACE_Wind_TestCase
 
 	public function test_span_within_latest_limit_uses_latest_with_one_extra_row()
 	{
-		$resp = $this->data($this->live_params(array('span' => 1800)));
+		$resp = $this->data($this->live_params(array('span' => 900)));
 		$this->assertSame(200, $resp->status);
 		list($path, $q) = $this->last_call();
 		$this->assertStringEndsWith('/latest', $path);
-		$this->assertSame('1801', $q['limit']);
+		$this->assertSame('901', $q['limit']);
 		$this->assertSame('1s', $q['resolution']);
 		$this->assertSame('aggregate_active_power', $q['fields']);
+	}
+
+	public static function row_boundary()
+	{
+		return array(
+			'999 s = 1000 rows: latest'            => array(999, '/latest'),
+			'1000 s = 1001 rows: paged range'      => array(1000, '/range'),
+			'1800 s (the default view): range'     => array(1800, '/range'),
+		);
+	}
+
+	/** The real API refuses a "latest" request for more than 1000 1-second rows. */
+	/** @dataProvider row_boundary */
+	public function test_more_than_1000_one_second_rows_use_the_paged_range_endpoint_not_latest($span, $endpoint)
+	{
+		$this->data($this->live_params(array('span' => $span)));
+		list($path, $q) = $this->last_call();
+		$this->assertStringEndsWith($endpoint, $path);
+		if ('/latest' === $endpoint) {
+			$this->assertLessThanOrEqual(1000, (int) $q['limit']);
+		}
+	}
+
+	public function test_a_latest_request_is_never_sent_with_more_rows_than_the_api_allows()
+	{
+		foreach (array(100, 999, 1000, 1800, 3600) as $span) {
+			ACE_Test_Env::$http_calls = array();
+			ACE_Test_Env::$transients = array();
+			$this->data($this->live_params(array('span' => $span)));
+			foreach ($this->calls_matching('/latest') as $url) {
+				parse_str((string) parse_url($url, PHP_URL_QUERY), $q);
+				$this->assertLessThanOrEqual(1000, (int) $q['limit'], "span $span");
+			}
+		}
 	}
 
 	public function test_explicit_limit_is_used_and_capped_at_the_apis_maximum()
@@ -23,7 +57,59 @@ class DataLatestTest extends ACE_Wind_TestCase
 
 		$this->data($this->live_params(array('span' => 0, 'limit' => 999999)));
 		list(, $q) = $this->last_call();
-		$this->assertSame('2000', $q['limit']);
+		$this->assertSame('1000', $q['limit']);
+	}
+
+	/* ---- if the API refuses a "latest" request anyway ---- */
+
+	/** Make /latest fail with the given response while everything else works. */
+	private function latest_fails($code, $body)
+	{
+		$inner = ACE_Test_Env::$http;
+		ACE_Test_Env::$http = function ($url) use ($code, $body, $inner) {
+			return strpos($url, '/latest') !== false ? array('code' => $code, 'body' => json_encode($body), 'headers' => array()) : call_user_func($inner, $url);
+		};
+	}
+
+	public function test_if_the_api_refuses_a_latest_request_for_a_time_span_it_falls_back_to_the_paged_range_endpoint()
+	{
+		$this->latest_fails(400, array('error' => array('message' => 'limit must be <= 500')));
+		$resp = $this->data($this->live_params(array('span' => 600)));
+		$this->assertSame(200, $resp->status, 'the visitor still gets a chart');
+		$this->assertNotEmpty($resp->data['timestamps']);
+		$this->assertCount(1, $this->calls_matching('/latest'));
+		$this->assertCount(1, $this->calls_matching('/range'));
+		list($path, $q) = $this->last_call();
+		$this->assertStringEndsWith('/range', $path);
+		$this->assertSame(600, strtotime($q['end']) - strtotime($q['start']));
+	}
+
+	public function test_an_explicit_limit_request_is_not_retried_as_a_range_its_error_is_reported()
+	{
+		$this->latest_fails(400, array('error' => array('message' => 'limit must be <= 500')));
+		$resp = $this->data($this->live_params(array('span' => 0, 'limit' => 5)));
+		$this->assertErrorResponse($resp, 400, 'ace_upstream');
+		$this->assertSame('limit must be <= 500', $resp->data['error']);
+		$this->assertSame(array(), $this->calls_matching('/range'));
+	}
+
+	public function test_other_latest_failures_are_not_masked_by_the_fallback()
+	{
+		$this->latest_fails(500, array('error' => array('message' => 'boom')));
+		$this->assertErrorResponse($this->data($this->live_params(array('span' => 600))), 502);
+		$this->assertSame(array(), $this->calls_matching('/range'));
+	}
+
+	public function test_if_the_range_endpoint_also_fails_that_error_is_what_the_visitor_sees()
+	{
+		$this->latest_fails(400, array('error' => array('message' => 'first')));
+		$inner = ACE_Test_Env::$http;
+		ACE_Test_Env::$http = function ($url) use ($inner) {
+			return strpos($url, '/range') !== false ? array('code' => 400, 'body' => json_encode(array('detail' => 'range too wide')), 'headers' => array()) : call_user_func($inner, $url);
+		};
+		$resp = $this->data($this->live_params(array('span' => 600)));
+		$this->assertErrorResponse($resp, 400, 'ace_upstream');
+		$this->assertSame('range too wide', $resp->data['error']);
 	}
 
 	public function test_limit_takes_precedence_over_span()

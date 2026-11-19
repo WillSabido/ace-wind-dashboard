@@ -84,8 +84,33 @@ class CatalogueTest extends ACE_Wind_TestCase
 		$this->assertSame(array('60s', '10m', 'daily'), array_column($res, 'resolution'));
 		$this->assertSame(array(60, 600, 86400), array_column($res, 'seconds'));
 		$this->assertSame(1000, $res[0]['max_page'], 'default page size');
-		$this->assertSame(2000, $res[0]['max_latest'], 'default latest limit');
+		$this->assertSame(1000, $res[0]['max_latest'], 'default latest limit is capped by the default page size');
 		$this->assertSame(60, $res[0]['refresh'], 'refresh defaults to the resolution');
+	}
+
+	public static function latest_limits()
+	{
+		return array(
+			'advertised 2000 but 1000 per page (the real API at 1 s)' => array(2000, 1000, 1000),
+			'latest lower than page'                                  => array(500, 1000, 500),
+			'both generous'                                           => array(3000, 2000, 2000),
+			'equal'                                                   => array(1000, 1000, 1000),
+		);
+	}
+
+	/** @dataProvider latest_limits */
+	public function test_the_effective_latest_limit_is_the_lower_of_the_advertised_latest_and_page_limits($latest, $page, $expected)
+	{
+		$this->families = array(array(
+			'family' => 'x',
+			'public' => true,
+			'scope' => 'site',
+			'capabilities' => array(array('resolution' => '1s', 'maximum_latest_records' => $latest, 'maximum_page_records' => $page)),
+			'fields' => array(array('name' => 'a')),
+		));
+		$res = $this->catalogue()['families'][0]['resolutions'][0];
+		$this->assertSame($expected, $res['max_latest']);
+		$this->assertSame($page, $res['max_page']);
 	}
 
 	public function test_field_without_label_falls_back_to_its_name()

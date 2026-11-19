@@ -135,6 +135,50 @@ describe("request(): errors", () => {
   });
 });
 
+describe("error codes", () => {
+  test("the plugin's machine-readable code is kept on the ApiError", async () => {
+    mockFetch(() =>
+      Promise.resolve(
+        jsonResponse({ error: "rejected", code: "ace_upstream" }, 400),
+      ),
+    );
+    const e = await load()
+      .request(REST, "data")
+      .catch((x) => x);
+    expect([e.status, e.code, e.message]).toEqual([
+      400,
+      "ace_upstream",
+      "rejected",
+    ]);
+  });
+  test("a missing or non-string code becomes an empty string", async () => {
+    mockFetch(() =>
+      Promise.resolve(jsonResponse({ error: "x", code: 42 }, 400)),
+    );
+    expect(
+      (
+        await load()
+          .request(REST, "data")
+          .catch((x) => x)
+      ).code,
+    ).toBe("");
+    mockFetch(() => Promise.resolve(jsonResponse({ error: "x" }, 400)));
+    expect(
+      (
+        await load()
+          .request(REST, "data")
+          .catch((x) => x)
+      ).code,
+    ).toBe("");
+  });
+  test("errorInfo exposes the code", () => {
+    const { ApiError, errorInfo } = load();
+    expect(errorInfo(new ApiError("m", 400, 0, "ace_too_many")).code).toBe(
+      "ace_too_many",
+    );
+  });
+});
+
 describe("errorInfo()", () => {
   const { errorInfo } = load();
   test("reads an ApiError", () => {
@@ -143,6 +187,7 @@ describe("errorInfo()", () => {
       message: "boom",
       status: 429,
       retry: 7,
+      code: "",
     });
   });
   test("reads a plain Error (no status, no retry)", () => {
@@ -150,6 +195,7 @@ describe("errorInfo()", () => {
       message: "offline",
       status: undefined,
       retry: 0,
+      code: "",
     });
   });
   test.each([[null], [undefined], ["a string"], [42], [{}]])(
@@ -159,6 +205,7 @@ describe("errorInfo()", () => {
         message: "",
         status: undefined,
         retry: 0,
+        code: "",
       });
     },
   );

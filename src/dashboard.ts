@@ -1,5 +1,7 @@
 import type uPlot from "uplot";
 import { catalogue, errorInfo, request } from "./api";
+import { explainError } from "./errors";
+import type { Explained } from "./errors";
 import type { Params } from "./api";
 import {
   ARROW,
@@ -110,6 +112,8 @@ export class Dash {
   private retryAfter = 0;
   /** Until the user touches a control or a chart has been drawn, an empty default view widens itself. */
   private autoWiden = true;
+  /** Set when the data service rejected the current selection; stops retrying until the visitor changes something. */
+  private noRetry = false;
 
   // Tile loop state.
   private tileTimer: number | undefined;
@@ -200,8 +204,16 @@ export class Dash {
     // Chart
     this.chartEl = h("div", { class: "acewd-chart" });
     this.msg = h("div", { class: "acewd-msg", role: "status" });
+    // Reserve the chart's height so loading/error messages are visible even when no chart has been drawn yet.
     el.appendChild(
-      h("div", { class: "acewd-chartwrap" }, [this.chartEl, this.msg]),
+      h(
+        "div",
+        {
+          class: "acewd-chartwrap",
+          style: "min-height:" + (c.height + 12) + "px",
+        },
+        [this.chartEl, this.msg],
+      ),
     );
 
     // Bottom bar
@@ -651,13 +663,38 @@ export class Dash {
   /* ---------- chart ---------- */
 
   private say(text: string): void {
-    this.msg.textContent = text || "";
+    this.msg.textContent = text || ""; // also removes any structured error content
+    this.msg.classList.remove("is-error");
+    this.msg.setAttribute("role", "status");
     this.msg.classList.toggle("show", !!text);
+  }
+
+  /** Replace the chart with an explanation of why it can't be shown, and what to try instead. */
+  private showFailure(ex: Explained): void {
+    if (this.plot) {
+      this.plot.destroy();
+      this.plot = null;
+      this.sig = "";
+    }
+    this.chartEl.innerHTML = "";
+    this.last = null;
+    this.note.textContent = "";
+
+    const m = this.msg;
+    m.textContent = "";
+    m.appendChild(h("div", { class: "acewd-msg__title", text: ex.title }));
+    m.appendChild(h("p", { class: "acewd-msg__reason", text: ex.reason }));
+    m.appendChild(h("p", { class: "acewd-msg__hint", text: ex.hint }));
+    if (ex.tech)
+      m.appendChild(h("small", { class: "acewd-msg__tech", text: ex.tech }));
+    m.classList.add("is-error", "show");
+    m.setAttribute("role", "alert");
   }
 
   private reload(): void {
     window.clearTimeout(this.timer);
     this.fail = 0;
+    this.noRetry = false;
     this.load(true);
   }
 
@@ -715,10 +752,19 @@ export class Dash {
       })
       .catch((e: unknown) => {
         this.busy = false;
-        this.fail += 1;
         const info = errorInfo(e);
         const detail = describe(info);
         console.warn("[ACE dashboard] chart request failed:", detail, params);
+        if (this.pending) return; // the visitor already chose something else; that request is queued
+
+        const ex = explainError(info);
+        if (!ex.retryable) {
+          // Retrying the identical request would fail identically: explain it instead, in the chart's place.
+          this.noRetry = true;
+          this.showFailure(ex);
+          return;
+        }
+        this.fail += 1;
         this.say(
           (info.status === 429
             ? "The data service is busy – retrying…"
@@ -760,7 +806,7 @@ export class Dash {
   private schedule(res: Resolution): void {
     const st = this.st;
     window.clearTimeout(this.timer);
-    if (!st.live || st.range === "custom") return;
+    if (!st.live || st.range === "custom" || this.noRetry) return;
 
     const base =
       res.seconds <= 1

@@ -5,30 +5,38 @@ export class ApiError extends Error {
   readonly status: number;
   /** Seconds the server asked us to wait (Retry-After), or 0. */
   readonly retry: number;
+  /** The plugin's error code, e.g. "ace_upstream" (empty if none). */
+  readonly code: string;
 
-  constructor(message: string, status: number, retry: number) {
+  constructor(message: string, status: number, retry: number, code = "") {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.retry = retry;
+    this.code = code;
   }
 }
 
-/** Pull message/status/retry from anything that was thrown, without assuming it is an ApiError. */
-export function errorInfo(e: unknown): {
+export interface ErrorInfo {
   message: string;
   status: number | undefined;
   retry: number;
-} {
+  code: string;
+}
+
+/** Pull message/status/retry/code from anything that was thrown, without assuming it is an ApiError. */
+export function errorInfo(e: unknown): ErrorInfo {
   const o = (e && typeof e === "object" ? e : {}) as {
     message?: unknown;
     status?: unknown;
     retry?: unknown;
+    code?: unknown;
   };
   return {
     message: typeof o.message === "string" ? o.message : "",
     status: typeof o.status === "number" ? o.status : undefined,
     retry: typeof o.retry === "number" ? o.retry : 0,
+    code: typeof o.code === "string" ? o.code : "",
   };
 }
 
@@ -61,12 +69,13 @@ export function request<T>(
     r
       .json()
       .catch(() => ({}))
-      .then((j: { error?: string }) => {
+      .then((j: { error?: string; code?: string }) => {
         if (!r.ok) {
           throw new ApiError(
             j.error || "Request failed (" + r.status + ")",
             r.status,
             parseInt(r.headers.get("Retry-After") || "", 10) || 0,
+            typeof j.code === "string" ? j.code : "",
           );
         }
         return j as unknown as T;

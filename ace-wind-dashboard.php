@@ -4,7 +4,7 @@
  * Plugin Name:       ACE Wind Turbine Dashboard
  * Plugin URI:        https://ambitioncommunityenergy.org/
  * Description:       Live data dashboard for the Ambition Community Energy wind turbine, powered by the ACE public data API. Add it with the [ace_wind_dashboard] shortcode, or add specified live readings with the "ACE Live Reading" block.
- * Version:           1.1.2
+ * Version:           1.1.3
  * Requires at least: 6.3
  * Requires PHP:      7.4
  * Author:            Will Sabido
@@ -22,7 +22,7 @@ require_once __DIR__ . '/includes/class-ace-wind-live-reading.php';
 final class ACE_Wind_Dashboard
 {
 
-	const VERSION = '1.1.2';
+	const VERSION = '1.1.3';
 	const OPT     = 'ace_wind_options';
 	const NS      = 'ace-wind/v1';
 
@@ -92,7 +92,7 @@ final class ACE_Wind_Dashboard
 				'family'   => 'site_instantaneous',
 				'field'    => 'aggregate_active_power',
 				'compare'  => 'aggregate_wind_speed',
-				'range'    => 999,
+				'range'    => 1800,
 				'height'   => 420,
 				'tiles'    => 'yes',
 				'controls' => 'yes',
@@ -248,8 +248,7 @@ final class ACE_Wind_Dashboard
 			if (false !== $stale) {
 				return $stale;
 			}
-			$msg = (is_array($body) && isset($body['error']['message'])) ? (string) $body['error']['message'] : 'Unexpected response from the data service.';
-			return $this->error('ace_upstream', $msg, ($code >= 400 && $code < 500) ? 400 : 502);
+			return $this->error('ace_upstream', self::upstream_message($body, $code), ($code >= 400 && $code < 500) ? 400 : 502);
 		}
 
 		// The licence/citation block is shown in the dashboard footer; don't cache it repeatedly.
@@ -258,6 +257,44 @@ final class ACE_Wind_Dashboard
 		set_transient($key, $body, $ttl);
 		set_transient($key . '_s', $body, HOUR_IN_SECONDS);
 		return $body;
+	}
+
+	/**
+	 * The most useful human-readable reason in an upstream error body: {error:{message}}, {error:"..."},
+	 * {detail:"..."}, FastAPI-style {detail:[{msg}]} or {message:"..."}; otherwise a generic sentence.
+	 *
+	 * @param mixed $body Decoded upstream response; may be any JSON value.
+	 * @param int   $code HTTP response code.
+	 * @return string
+	 */
+	private static function upstream_message($body, $code)
+	{
+		$generic = ($code >= 400 && $code < 500)
+			? 'The data service rejected the request (HTTP ' . (int) $code . ').'
+			: 'Unexpected response from the data service.';
+		if (! is_array($body)) {
+			return $generic;
+		}
+		$candidates = array(
+			isset($body['error']) && is_array($body['error']) ? ($body['error']['message'] ?? null) : ($body['error'] ?? null),
+			$body['detail'] ?? null,
+			$body['message'] ?? null,
+		);
+		foreach ($candidates as $c) {
+			if (is_array($c)) {
+				$first = reset($c);
+				$c     = is_array($first) ? ($first['msg'] ?? null) : $first;
+			}
+			if (is_string($c) && '' !== trim($c)) {
+				// Drop real HTML tags only ("<" followed by a letter, "/" or "!"): a bare "<" ("must be <= 1000") is text, and the
+				// browser shows this message as plain text.
+				$c = trim(preg_replace('/\s+/', ' ', preg_replace('/<\/?[a-zA-Z!][^>]*>/', '', $c)));
+				if ('' !== $c) {
+					return mb_substr($c, 0, 200);
+				}
+			}
+		}
+		return $generic;
 	}
 
 	/* ---- Catalogue --------------------------------------------------- */
@@ -357,7 +394,9 @@ final class ACE_Wind_Dashboard
 					'seconds'    => $s,
 					'refresh'    => (int) ($c['recommended_refresh_seconds'] ?? max(1, $s)),
 					'max_page'   => (int) ($c['maximum_page_records'] ?? 1000),
-					'max_latest' => (int) ($c['maximum_latest_records'] ?? 2000),
+					// The API advertises a "latest" limit that it does not always honour (e.g. 2000 for 1-second
+					// data while refusing more than the 1000-row page size), so trust the lower of the two.
+					'max_latest' => min((int) ($c['maximum_latest_records'] ?? 2000), (int) ($c['maximum_page_records'] ?? 1000)),
 				);
 			}
 			usort($res, function ($x, $y) {
@@ -671,20 +710,33 @@ final class ACE_Wind_Dashboard
 		$ser   = array_fill_keys($fields, array());
 		$trunc = false;
 
-		if ($limit > 0 || ($span > 0 && (int) ceil($span / $rs) + 1 <= $res['max_latest'])) {
+		$use_latest = $limit > 0 || ($span > 0 && (int) ceil($span / $rs) + 1 <= $res['max_latest']);
+		if ($use_latest) {
 			// ---- "Latest N records": the live path.
 			$n = $limit > 0 ? $limit : (int) ceil($span / $rs) + 1;
 			$n = max(1, min($n, $res['max_latest']));
 			$b = $this->upstream($base . '/latest', $common + array('limit' => $n), $rs <= 1 ? 1 : 5);
 			if (is_wp_error($b)) {
-				return $this->error_response($b);
+				$d = $b->get_error_data();
+				if ($limit <= 0 && $span > 0 && 400 === (is_array($d) && isset($d['status']) ? (int) $d['status'] : 0)) {
+					// The API refused the row count: fall back to the paged range endpoint, whose page size is documented.
+					$use_latest = false;
+				} else {
+					return $this->error_response($b);
+				}
+			} else {
+				$this->merge_page($b, $fields, $ts, $ser);
 			}
-			$this->merge_page($b, $fields, $ts, $ser);
-		} else {
+		}
+
+		if (! $use_latest) {
 			// ---- Historical range, paginated sequentially (as the API asks).
 			if ($span > 0) {
-				$bucket = max(30, $rs);
-				$end    = (int) (ceil(time() / $bucket) * $bucket);
+				// Windows are rounded so repeated requests share one cache entry. 1-second data is "live", so its
+				// window moves every 2 s; slower data every 30 s (or its own resolution).
+				$bucket = $rs <= 1 ? 2 : max(30, $rs);
+				$now    = (int) apply_filters('ace_wind_now', time());   // filterable so the time window can be tested
+				$end    = (int) (ceil($now / $bucket) * $bucket);
 				$start  = $end - $span;
 			} else {
 				$start = self::to_iso($r['start']) ? strtotime(self::to_iso($r['start'])) : 0;
@@ -707,7 +759,7 @@ final class ACE_Wind_Dashboard
 				if ($cursor) {
 					$q['cursor'] = $cursor;
 				}
-				$b = $this->upstream($base . '/range', $q, 30);
+				$b = $this->upstream($base . '/range', $q, $rs <= 1 && $span > 0 ? 2 : 30);
 				if (is_wp_error($b)) {
 					return $this->error_response($b);
 				}

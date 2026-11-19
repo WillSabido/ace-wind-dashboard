@@ -3,11 +3,12 @@
 (() => {
   // src/api.ts
   var ApiError = class extends Error {
-    constructor(message, status, retry) {
+    constructor(message, status, retry, code = "") {
       super(message);
       this.name = "ApiError";
       this.status = status;
       this.retry = retry;
+      this.code = code;
     }
   };
   function errorInfo(e) {
@@ -15,7 +16,8 @@
     return {
       message: typeof o.message === "string" ? o.message : "",
       status: typeof o.status === "number" ? o.status : void 0,
-      retry: typeof o.retry === "number" ? o.retry : 0
+      retry: typeof o.retry === "number" ? o.retry : 0,
+      code: typeof o.code === "string" ? o.code : ""
     };
   }
   function request(rest, path, params = {}) {
@@ -35,7 +37,8 @@
           throw new ApiError(
             j.error || "Request failed (" + r.status + ")",
             r.status,
-            parseInt(r.headers.get("Retry-After") || "", 10) || 0
+            parseInt(r.headers.get("Retry-After") || "", 10) || 0,
+            typeof j.code === "string" ? j.code : ""
           );
         }
         return j;
@@ -53,6 +56,35 @@
       );
     }
     return catalogues[rest];
+  }
+
+  // src/errors.ts
+  function sentence(text) {
+    const t = text.trim();
+    return t === "" ? "" : /[.!?]$/.test(t) ? t : t + ".";
+  }
+  var PERIOD_CODES = ["ace_too_many", "ace_bad_range"];
+  var SELECTION_CODES = [
+    "ace_bad_fields",
+    "ace_bad_family",
+    "ace_bad_asset",
+    "ace_bad_resolution"
+  ];
+  function explainError(info) {
+    const status = info.status;
+    const clientError = status !== void 0 && status >= 400 && status < 500 && status !== 429;
+    let hint = "Try a shorter time period or a different measurement.";
+    if (info.code && PERIOD_CODES.indexOf(info.code) >= 0)
+      hint = "Try a shorter time period.";
+    else if (info.code && SELECTION_CODES.indexOf(info.code) >= 0)
+      hint = "Try a different measurement or data set.";
+    return {
+      retryable: !clientError,
+      title: "This chart can’t be shown",
+      reason: sentence(info.message) || "The data service rejected the request.",
+      hint,
+      tech: [status !== void 0 ? "HTTP " + status : "", info.code].filter((x) => x).join(" · ")
+    };
   }
 
   // src/constants.ts
@@ -165,7 +197,7 @@
     let chosen = null;
     let idx = -1;
     for (let i = 0; i < list.length; i++) {
-      if (span / list[i].seconds <= LIMITS.latest) {
+      if (span / list[i].seconds <= (list[i].max_latest || LIMITS.latest)) {
         chosen = list[i];
         idx = i;
         break;
@@ -211,6 +243,8 @@
       this.retryAfter = 0;
       /** Until the user touches a control or a chart has been drawn, an empty default view widens itself. */
       this.autoWiden = true;
+      /** Set when the data service rejected the current selection; stops retrying until the visitor changes something. */
+      this.noRetry = false;
       this.tileFail = 0;
       this.tileDelay = 0;
       this.el = el;
@@ -279,7 +313,14 @@
       this.chartEl = h("div", { class: "acewd-chart" });
       this.msg = h("div", { class: "acewd-msg", role: "status" });
       el.appendChild(
-        h("div", { class: "acewd-chartwrap" }, [this.chartEl, this.msg])
+        h(
+          "div",
+          {
+            class: "acewd-chartwrap",
+            style: "min-height:" + (c.height + 12) + "px"
+          },
+          [this.chartEl, this.msg]
+        )
       );
       this.note = h("span", { class: "acewd-note", "aria-live": "polite" });
       this.liveBtn = h("button", {
@@ -659,11 +700,34 @@
     /* ---------- chart ---------- */
     say(text) {
       this.msg.textContent = text || "";
+      this.msg.classList.remove("is-error");
+      this.msg.setAttribute("role", "status");
       this.msg.classList.toggle("show", !!text);
+    }
+    /** Replace the chart with an explanation of why it can't be shown, and what to try instead. */
+    showFailure(ex) {
+      if (this.plot) {
+        this.plot.destroy();
+        this.plot = null;
+        this.sig = "";
+      }
+      this.chartEl.innerHTML = "";
+      this.last = null;
+      this.note.textContent = "";
+      const m = this.msg;
+      m.textContent = "";
+      m.appendChild(h("div", { class: "acewd-msg__title", text: ex.title }));
+      m.appendChild(h("p", { class: "acewd-msg__reason", text: ex.reason }));
+      m.appendChild(h("p", { class: "acewd-msg__hint", text: ex.hint }));
+      if (ex.tech)
+        m.appendChild(h("small", { class: "acewd-msg__tech", text: ex.tech }));
+      m.classList.add("is-error", "show");
+      m.setAttribute("role", "alert");
     }
     reload() {
       window.clearTimeout(this.timer);
       this.fail = 0;
+      this.noRetry = false;
       this.load(true);
     }
     load(showSpin) {
@@ -706,10 +770,17 @@
         this.render(d, fields);
       }).catch((e) => {
         this.busy = false;
-        this.fail += 1;
         const info = errorInfo(e);
         const detail = describe(info);
         console.warn("[ACE dashboard] chart request failed:", detail, params);
+        if (this.pending) return;
+        const ex = explainError(info);
+        if (!ex.retryable) {
+          this.noRetry = true;
+          this.showFailure(ex);
+          return;
+        }
+        this.fail += 1;
         this.say(
           (info.status === 429 ? "The data service is busy – retrying…" : "Couldn’t load data – retrying…") + (detail ? " (" + detail + ")" : "")
         );
@@ -745,7 +816,7 @@
     schedule(res) {
       const st = this.st;
       window.clearTimeout(this.timer);
-      if (!st.live || st.range === "custom") return;
+      if (!st.live || st.range === "custom" || this.noRetry) return;
       const base = res.seconds <= 1 ? Math.max(1, this.cfg.liveRefresh) : Math.max(res.refresh, 5);
       let delay = this.fail ? Math.min(6e4, base * 1e3 * Math.pow(2, Math.min(this.fail, 5))) : base * 1e3;
       if (this.retryAfter) {

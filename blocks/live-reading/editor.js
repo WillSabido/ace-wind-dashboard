@@ -305,11 +305,12 @@
 
   // src/api.ts
   var ApiError = class extends Error {
-    constructor(message, status, retry) {
+    constructor(message, status, retry, code = "") {
       super(message);
       this.name = "ApiError";
       this.status = status;
       this.retry = retry;
+      this.code = code;
     }
   };
   function errorInfo(e) {
@@ -317,7 +318,8 @@
     return {
       message: typeof o.message === "string" ? o.message : "",
       status: typeof o.status === "number" ? o.status : void 0,
-      retry: typeof o.retry === "number" ? o.retry : 0
+      retry: typeof o.retry === "number" ? o.retry : 0,
+      code: typeof o.code === "string" ? o.code : ""
     };
   }
   function request(rest, path, params = {}) {
@@ -337,7 +339,8 @@
           throw new ApiError(
             j.error || "Request failed (" + r.status + ")",
             r.status,
-            parseInt(r.headers.get("Retry-After") || "", 10) || 0
+            parseInt(r.headers.get("Retry-After") || "", 10) || 0,
+            typeof j.code === "string" ? j.code : ""
           );
         }
         return j;
